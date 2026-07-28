@@ -52,3 +52,23 @@ def calculate_margin(
         margin=round_money(margin),
         margin_pct=round_pct(margin_pct),
     )
+
+
+SCENARIO_ADJUSTMENTS: tuple[Decimal, ...] = (
+    Decimal("-0.10"),
+    Decimal("-0.05"),
+    Decimal("0.00"),
+    Decimal("0.05"),
+)
+
+
+def calculate_margin_matrix(
+    wholesale_price: Decimal,
+    market_price: Decimal,
+    cost_config: CostConfig,
+    scenarios: tuple[Decimal, ...] = SCENARIO_ADJUSTMENTS,
+) -> list[MarginResult]:
+    return [
+        calculate_margin(wholesale_price, market_price, cost_config, scenario_pct)
+        for scenario_pct in scenarios
+    ]
