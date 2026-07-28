@@ -15,7 +15,10 @@ class _DefaultDialect(csv.Dialect):
 def detect_encoding(raw_bytes: bytes) -> str:
     try:
         raw_bytes.decode("utf-8")
-        return "utf-8"
+        # "utf-8-sig" transparently strips a leading BOM (the default when
+        # Excel on Windows exports CSV) while still decoding plain UTF-8
+        # without a BOM identically -- handles both cases uniformly.
+        return "utf-8-sig"
     except UnicodeDecodeError:
         return "cp1250"
 

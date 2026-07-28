@@ -24,5 +24,5 @@ def test_parses_real_catalog_without_crashing():
     products = source.fetch_products()
 
     assert len(products) > 0
-    assert all(p.wholesale_price >= 0 for p in products)
+    assert all(p.wholesale_price > 0 for p in products)
     print(f"Parsed {len(products)} products, {len(source.warnings)} warnings")

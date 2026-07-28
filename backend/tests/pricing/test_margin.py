@@ -1,6 +1,8 @@
 from decimal import Decimal
 
-from app.pricing.margin import CostConfig, calculate_margin
+import pytest
+
+from app.pricing.margin import CostConfig, UndefinedMarginError, calculate_margin
 
 COST_CONFIG = CostConfig(
     commission_pct=Decimal("0.10"),
@@ -48,3 +50,23 @@ def test_profitable_at_market_price():
     assert result.total_costs == Decimal("67.00")
     assert result.margin == Decimal("14.30")
     assert result.margin_pct == Decimal("0.1430")
+
+
+def test_raises_undefined_margin_error_when_market_price_is_zero():
+    with pytest.raises(UndefinedMarginError):
+        calculate_margin(
+            wholesale_price=Decimal("40.00"),
+            market_price=Decimal("0"),
+            cost_config=COST_CONFIG,
+            scenario_pct=Decimal("0.00"),
+        )
+
+
+def test_raises_undefined_margin_error_when_scenario_pct_zeroes_sale_price():
+    with pytest.raises(UndefinedMarginError):
+        calculate_margin(
+            wholesale_price=Decimal("40.00"),
+            market_price=Decimal("100.00"),
+            cost_config=COST_CONFIG,
+            scenario_pct=Decimal("-1"),
+        )

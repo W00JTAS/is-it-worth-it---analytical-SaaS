@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-NAME_ALIASES = {"nazwa", "name", "produkt", "nazwa produktu", "product name", "product"}
-PRICE_ALIASES = {"cena", "cena hurtowa", "price", "wholesale price", "cena netto", "cena zakupu"}
-EAN_ALIASES = {"ean", "kod ean", "barcode", "kod kreskowy", "gtin"}
-CATEGORY_ALIASES = {"kategoria", "category", "grupa", "grupa produktowa"}
+# Ordered most-specific-first: when a header contains multiple aliases for the
+# same field (e.g. both "Cena" and "Cena hurtowa"), the earlier (more specific)
+# match wins. These must stay tuples, not sets -- set iteration order is
+# randomized per-process (PYTHONHASHSEED), which made column detection
+# nondeterministic across runs.
+NAME_ALIASES = ("nazwa produktu", "product name", "nazwa", "produkt", "name", "product")
+PRICE_ALIASES = ("cena hurtowa", "cena zakupu", "cena netto", "wholesale price", "cena", "price")
+EAN_ALIASES = ("kod ean", "kod kreskowy", "ean", "barcode", "gtin")
+CATEGORY_ALIASES = ("grupa produktowa", "kategoria", "category", "grupa")
 
 
 class ColumnMappingError(Exception):
@@ -23,7 +28,7 @@ class ColumnMapping:
 def detect_column_mapping(header: list[str]) -> ColumnMapping:
     normalized = {h.strip().lower(): h for h in header}
 
-    def find(aliases: set[str], field_label: str) -> str:
+    def find(aliases: tuple[str, ...], field_label: str) -> str:
         for alias in aliases:
             if alias in normalized:
                 return normalized[alias]

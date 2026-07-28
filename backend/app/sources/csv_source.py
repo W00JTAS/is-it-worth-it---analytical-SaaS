@@ -57,9 +57,16 @@ class CsvCatalogSource:
                 self.warnings.append(f"Row {row_index}: invalid price '{raw_price}', skipped")
                 continue
 
+            if wholesale_price == 0:
+                self.warnings.append(f"Row {row_index}: zero price, skipped")
+                continue
+
             category = (row.get(mapping.category) or "").strip() or "Bez kategorii"
 
             raw_ean = (row.get(mapping.ean) or "").strip()
+            if len(raw_ean) == 12 and raw_ean.isdigit():
+                # UPC-A is numerically identical to EAN-13 with a leading zero.
+                raw_ean = "0" + raw_ean
             ean: str | None = None
             if raw_ean:
                 if is_valid_ean(raw_ean):

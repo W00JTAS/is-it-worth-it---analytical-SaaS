@@ -6,7 +6,14 @@ SAMPLE_TEXT = "Nazwa;Cena;EAN;Kategoria\nŁóżko;100,00;5901234123457;Meble\n"
 
 
 def test_detects_utf8_encoding():
-    assert detect_encoding(SAMPLE_TEXT.encode("utf-8")) == "utf-8"
+    assert detect_encoding(SAMPLE_TEXT.encode("utf-8")) == "utf-8-sig"
+
+
+def test_detects_utf8_encoding_with_bom():
+    # "utf-8-sig" transparently strips a leading BOM (the default when Excel
+    # on Windows exports CSV) while decoding a BOM-less UTF-8 sample
+    # identically -- one codec choice handles both cases.
+    assert detect_encoding(b"\xef\xbb\xbf" + SAMPLE_TEXT.encode("utf-8")) == "utf-8-sig"
 
 
 def test_falls_back_to_cp1250_when_utf8_decode_fails():

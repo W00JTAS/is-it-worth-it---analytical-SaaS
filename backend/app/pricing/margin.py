@@ -20,6 +20,10 @@ class CostConfig:
     returns_pct: Decimal
 
 
+class UndefinedMarginError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class MarginResult:
     scenario_pct: Decimal
@@ -37,6 +41,11 @@ def calculate_margin(
     scenario_pct: Decimal,
 ) -> MarginResult:
     sale_price = market_price * (Decimal("1") + scenario_pct)
+    if sale_price == 0:
+        raise UndefinedMarginError(
+            f"Cannot compute margin: sale_price is zero "
+            f"(market_price={market_price}, scenario_pct={scenario_pct})"
+        )
     net_revenue = sale_price / (Decimal("1") + cost_config.vat_pct)
     commission_amount = sale_price * cost_config.commission_pct
     returns_amount = sale_price * cost_config.returns_pct

@@ -4,6 +4,10 @@ from app.sources.csv_source import CsvCatalogSource
 
 VALID_EAN = "5901234123457"
 INVALID_EAN = "5901234123458"
+# UPC-A (12-digit) barcode that checksum-validates as EAN-13 once zero-padded
+# (verified: is_valid_ean("0" + UPC_A) is True).
+UPC_A = "698813001132"
+PADDED_UPC_A = "0" + UPC_A
 
 HEADER = "Nazwa;Cena hurtowa;EAN;Kategoria\n"
 
@@ -75,3 +79,36 @@ def test_parses_comma_delimited_file():
     source = CsvCatalogSource(raw, tenant_id="t1")
     products = source.fetch_products()
     assert products[0].wholesale_price == Decimal("100.00")
+
+
+def test_skips_row_with_zero_price():
+    source = CsvCatalogSource(_csv(f"Łóżko;0,00;{VALID_EAN};Meble\n"), tenant_id="t1")
+    products = source.fetch_products()
+    assert len(products) == 0
+    assert any("zero price" in w for w in source.warnings)
+
+
+def test_skips_row_with_zero_price_no_decimals():
+    source = CsvCatalogSource(_csv(f"Łóżko;0;{VALID_EAN};Meble\n"), tenant_id="t1")
+    products = source.fetch_products()
+    assert len(products) == 0
+    assert any("zero price" in w for w in source.warnings)
+
+
+def test_zero_pads_valid_upc_a_barcode_to_ean13():
+    source = CsvCatalogSource(_csv(f"Łóżko;100,00;{UPC_A};Meble\n"), tenant_id="t1")
+    products = source.fetch_products()
+    assert len(products) == 1
+    assert products[0].ean == PADDED_UPC_A
+    assert len(products[0].ean) == 13
+
+
+def test_parses_bom_prefixed_csv_end_to_end():
+    # b"\xef\xbb\xbf" is the UTF-8 BOM Excel-on-Windows prepends when exporting
+    # CSV. Previously this raised ColumnMappingError because the BOM ended up
+    # glued to the first header cell ("﻿Nazwa" matched no alias).
+    raw = b"\xef\xbb\xbf" + _csv(f"Łóżko;100,00;{VALID_EAN};Meble\n")
+    source = CsvCatalogSource(raw, tenant_id="t1")
+    products = source.fetch_products()
+    assert len(products) == 1
+    assert products[0].name == "Łóżko"
