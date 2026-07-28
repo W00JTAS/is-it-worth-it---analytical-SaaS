@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import json
+import logging
+import math
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
 
 from app.models.product import Product
-from app.providers.base import OfferResult
+from app.providers.base import OfferResult, ProviderUnavailable
 
 API_URL = "https://api.perplexity.ai/chat/completions"
 MODEL = "sonar"
+
+logger = logging.getLogger(__name__)
 
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -45,27 +49,37 @@ class PerplexityProvider:
     def find_cheapest(
         self, product: Product, market: str, max_delivery_days: int
     ) -> OfferResult | None:
-        response = self._client.post(
-            API_URL,
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "messages": [
-                    {"role": "user", "content": self._build_prompt(product, market, max_delivery_days)}
-                ],
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {"name": "cheapest_offer", "schema": RESPONSE_SCHEMA},
-                },
-            },
-        )
         try:
+            response = self._client.post(
+                API_URL,
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": MODEL,
+                    "messages": [
+                        {"role": "user", "content": self._build_prompt(product, market, max_delivery_days)}
+                    ],
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": {"name": "cheapest_offer", "schema": RESPONSE_SCHEMA},
+                    },
+                },
+            )
             response.raise_for_status()
             response_json = response.json()
-        except (httpx.HTTPError, json.JSONDecodeError):
+        except httpx.HTTPError as exc:
+            # Transport errors (ConnectError, ReadTimeout, PoolTimeout, ...) and
+            # non-2xx statuses (HTTPStatusError) are transient failures — the
+            # provider was never actually consulted, so this must not be cached
+            # as a genuine "no offer found" result. See ProviderUnavailable.
+            logger.warning(
+                "Perplexity provider request failed transiently for product %r: %s",
+                product.name, exc,
+            )
+            raise ProviderUnavailable(str(exc)) from exc
+        except json.JSONDecodeError:
             return None
         return self._parse_response(response_json, max_delivery_days)
 
@@ -97,25 +111,42 @@ class PerplexityProvider:
         if not source_url:
             return None
 
+        currency = parsed.get("currency", "PLN")
+        if not isinstance(currency, str) or not currency:
+            return None
+
         delivery_days = parsed.get("delivery_days")
-        if not isinstance(delivery_days, int) or delivery_days > max_delivery_days:
+        if (
+            not isinstance(delivery_days, int)
+            or isinstance(delivery_days, bool)
+            or delivery_days < 0
+            or delivery_days > max_delivery_days
+        ):
             return None
 
         try:
             price = Decimal(str(parsed["price"]))
         except (InvalidOperation, KeyError, TypeError):
             return None
+        if not price.is_finite() or price <= 0:
+            return None
 
         try:
             confidence = float(parsed.get("confidence", 0.0))
         except (ValueError, TypeError):
             return None
+        if not math.isfinite(confidence) or not (0.0 <= confidence <= 1.0):
+            return None
 
-        citations = tuple(response_json.get("citations", []))
+        raw_citations = response_json.get("citations") or []
+        if isinstance(raw_citations, list):
+            citations = tuple(c for c in raw_citations if isinstance(c, str))
+        else:
+            citations = ()
 
         return OfferResult(
             price=price,
-            currency=parsed.get("currency", "PLN"),
+            currency=currency,
             seller=parsed.get("seller", "unknown"),
             source_url=source_url,
             delivery_days=delivery_days,

@@ -1,3 +1,4 @@
+import threading
 import time
 from decimal import Decimal
 
@@ -69,4 +70,36 @@ def test_expired_entry_is_treated_as_a_miss(tmp_path):
     time.sleep(1.1)
 
     assert cache.get("5901234123457", "PL", "perplexity", 5) is None
+    cache.close()
+
+
+def test_get_and_set_work_from_a_different_thread(tmp_path):
+    """The connection is created with check_same_thread=False (Phase 4 will run
+    a concurrent job engine sharing one PriceCache across threads/tasks) — a
+    get()/set() round trip from a non-constructor thread must not raise
+    sqlite3's "objects created in a thread can only be used in that same
+    thread" ProgrammingError."""
+    cache = PriceCache(tmp_path / "cache.sqlite3")
+    offer = _make_offer()
+    errors: list[BaseException] = []
+
+    def worker():
+        try:
+            cache.set("5901234123457", "PL", "perplexity", 5, offer)
+            entry = cache.get("5901234123457", "PL", "perplexity", 5)
+            assert entry is not None
+            assert entry.found is True
+            assert entry.offer == offer
+        except BaseException as exc:  # noqa: BLE001 - surfaced via assertion below
+            errors.append(exc)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    thread.join()
+
+    assert not errors, errors
+    # And a second, sequential get/set from the main thread still behaves.
+    entry = cache.get("5901234123457", "PL", "perplexity", 5)
+    assert entry is not None
+    assert entry.offer == offer
     cache.close()
