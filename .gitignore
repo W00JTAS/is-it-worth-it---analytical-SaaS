@@ -1,2 +1,4 @@
 .claude/handoffs/
 .worktrees/
+.env
+.env.local
