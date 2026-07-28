@@ -62,8 +62,12 @@ class PerplexityProvider:
                 },
             },
         )
-        response.raise_for_status()
-        return self._parse_response(response.json(), max_delivery_days)
+        try:
+            response.raise_for_status()
+            response_json = response.json()
+        except (httpx.HTTPError, json.JSONDecodeError):
+            return None
+        return self._parse_response(response_json, max_delivery_days)
 
     def _build_prompt(self, product: Product, market: str, max_delivery_days: int) -> str:
         ean_part = f" (EAN: {product.ean})" if product.ean else ""
@@ -102,6 +106,11 @@ class PerplexityProvider:
         except (InvalidOperation, KeyError, TypeError):
             return None
 
+        try:
+            confidence = float(parsed.get("confidence", 0.0))
+        except (ValueError, TypeError):
+            return None
+
         citations = tuple(response_json.get("citations", []))
 
         return OfferResult(
@@ -110,7 +119,7 @@ class PerplexityProvider:
             seller=parsed.get("seller", "unknown"),
             source_url=source_url,
             delivery_days=delivery_days,
-            confidence=float(parsed.get("confidence", 0.0)),
+            confidence=confidence,
             citations=citations,
             raw_response=raw_response,
         )

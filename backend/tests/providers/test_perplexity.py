@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal
 
+import httpx
 import pytest
 
 from app.models.product import Product
@@ -42,6 +43,38 @@ class _FakeClient:
                 "citations": self._citations,
             }
         )
+
+
+class _RaisingStatusResponse:
+    """Simulates a non-2xx HTTP response: raise_for_status() raises."""
+
+    def raise_for_status(self) -> None:
+        request = httpx.Request("POST", "https://api.perplexity.ai/chat/completions")
+        response = httpx.Response(status_code=429, request=request)
+        raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+
+    def json(self) -> dict:
+        raise AssertionError("json() should not be called when raise_for_status() raises")
+
+
+class _BadJsonResponse:
+    """Simulates a 2xx response whose body is not valid JSON."""
+
+    def raise_for_status(self) -> None:
+        pass
+
+    def json(self) -> dict:
+        raise json.JSONDecodeError("Expecting value", "not json", 0)
+
+
+class _RaisingStatusClient:
+    def post(self, url, headers, json):
+        return _RaisingStatusResponse()
+
+
+class _BadJsonClient:
+    def post(self, url, headers, json):
+        return _BadJsonResponse()
 
 
 def test_returns_offer_for_a_valid_found_response():
@@ -122,6 +155,39 @@ def test_returns_none_when_delivery_exceeds_limit():
 
 def test_returns_none_on_malformed_content():
     client = _FakeClient(content=None)  # json.dumps(None) -> "null" -> parses to None, not a dict
+    provider = PerplexityProvider(api_key="test-key", client=client)
+
+    offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    assert offer is None
+
+
+def test_returns_none_when_http_status_error_raised():
+    """A non-2xx response (e.g. 429 rate limit) must not propagate — see Task 4 review."""
+    provider = PerplexityProvider(api_key="test-key", client=_RaisingStatusClient())
+
+    offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    assert offer is None
+
+
+def test_returns_none_when_response_body_is_not_json():
+    """A 2xx response with a non-JSON body must not propagate a JSONDecodeError."""
+    provider = PerplexityProvider(api_key="test-key", client=_BadJsonClient())
+
+    offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    assert offer is None
+
+
+def test_returns_none_when_confidence_is_not_numeric():
+    client = _FakeClient(
+        content={
+            "found": True, "price": 10.0, "currency": "PLN", "seller": "X",
+            "source_url": "https://example.com/x", "delivery_days": 2,
+            "confidence": "very confident",
+        }
+    )
     provider = PerplexityProvider(api_key="test-key", client=client)
 
     offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
