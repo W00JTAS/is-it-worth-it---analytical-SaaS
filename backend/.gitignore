@@ -1,1 +1,3 @@
 tests/fixtures/real_catalog.csv
+.env
+.env.local
