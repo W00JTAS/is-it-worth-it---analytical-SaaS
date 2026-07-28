@@ -22,6 +22,14 @@ def detect_encoding(raw_bytes: bytes) -> str:
 
 def detect_dialect(sample_text: str) -> type[csv.Dialect]:
     try:
-        return csv.Sniffer().sniff(sample_text, delimiters=";,")
+        dialect = csv.Sniffer().sniff(sample_text, delimiters=";,")
+        # csv.Sniffer's doublequote heuristic is unreliable on real-world data:
+        # it can guess False even when a quoted field legitimately contains an
+        # RFC 4180 doubled-quote escape ("" for a literal "), which then causes
+        # the csv module to misparse the row (fields shift silently). Virtually
+        # all real-world quoted CSV exports use RFC 4180 escaping, so force it,
+        # matching the assumption already made by _DefaultDialect below.
+        dialect.doublequote = True
+        return dialect
     except csv.Error:
         return _DefaultDialect
