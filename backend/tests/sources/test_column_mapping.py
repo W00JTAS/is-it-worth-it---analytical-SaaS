@@ -20,6 +20,16 @@ def test_raises_when_a_column_cannot_be_mapped():
         detect_column_mapping(["Foo", "Bar"])
 
 
+def test_detects_sku_column_matching_real_supplier_header():
+    mapping = detect_column_mapping(["SKU", "ean", "nazwa", "kategoria", "cena"])
+    assert mapping.sku == "SKU"
+
+
+def test_sku_is_none_when_no_sku_like_column_present():
+    mapping = detect_column_mapping(["Nazwa", "Cena hurtowa", "EAN", "Kategoria"])
+    assert mapping.sku is None
+
+
 def test_prefers_more_specific_alias_when_multiple_columns_match():
     # Real Polish supplier exports commonly carry both a generic "Cena" and a
     # more specific "Cena hurtowa" column side by side. Detection must

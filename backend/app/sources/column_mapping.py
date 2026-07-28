@@ -11,6 +11,10 @@ NAME_ALIASES = ("nazwa produktu", "product name", "nazwa", "produkt", "name", "p
 PRICE_ALIASES = ("cena hurtowa", "cena zakupu", "cena netto", "wholesale price", "cena", "price")
 EAN_ALIASES = ("kod ean", "kod kreskowy", "ean", "barcode", "gtin")
 CATEGORY_ALIASES = ("grupa produktowa", "kategoria", "category", "grupa")
+# Supplier's stable product identifier. Optional -- unlike the four aliases
+# above, a missing SKU column is not an error; callers fall back to the CSV
+# row index (see CsvCatalogSource.fetch_products).
+SKU_ALIASES = ("sku", "kod sku", "symbol")
 
 
 class ColumnMappingError(Exception):
@@ -23,6 +27,7 @@ class ColumnMapping:
     wholesale_price: str
     ean: str
     category: str
+    sku: str | None = None
 
 
 def detect_column_mapping(header: list[str]) -> ColumnMapping:
@@ -34,9 +39,16 @@ def detect_column_mapping(header: list[str]) -> ColumnMapping:
                 return normalized[alias]
         raise ColumnMappingError(f"Could not detect column for '{field_label}' in header {header}")
 
+    def find_optional(aliases: tuple[str, ...]) -> str | None:
+        for alias in aliases:
+            if alias in normalized:
+                return normalized[alias]
+        return None
+
     return ColumnMapping(
         name=find(NAME_ALIASES, "name"),
         wholesale_price=find(PRICE_ALIASES, "wholesale_price"),
         ean=find(EAN_ALIASES, "ean"),
         category=find(CATEGORY_ALIASES, "category"),
+        sku=find_optional(SKU_ALIASES),
     )

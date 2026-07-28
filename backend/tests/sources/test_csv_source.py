@@ -52,13 +52,38 @@ def test_clears_ean_with_bad_checksum_but_keeps_row():
     assert any("invalid EAN checksum" in w for w in source.warnings)
 
 
-def test_skips_duplicate_ean():
+def test_duplicate_ean_keeps_first_when_first_is_cheaper():
     rows = f"Łóżko;100,00;{VALID_EAN};Meble\nStół;200,00;{VALID_EAN};Meble\n"
     source = CsvCatalogSource(_csv(rows), tenant_id="t1")
     products = source.fetch_products()
     assert len(products) == 1
     assert products[0].name == "Łóżko"
+    assert products[0].wholesale_price == Decimal("100.00")
     assert any("duplicate EAN" in w for w in source.warnings)
+
+
+def test_duplicate_ean_replaces_with_cheaper_later_row():
+    rows = f"Łóżko;200,00;{VALID_EAN};Meble\nStół;100,00;{VALID_EAN};Meble\n"
+    source = CsvCatalogSource(_csv(rows), tenant_id="t1")
+    products = source.fetch_products()
+    assert len(products) == 1
+    assert products[0].name == "Stół"
+    assert products[0].wholesale_price == Decimal("100.00")
+    assert any("duplicate EAN" in w for w in source.warnings)
+
+
+def test_duplicate_ean_three_rows_keeps_cheapest_at_first_position():
+    rows = (
+        f"Łóżko;200,00;{VALID_EAN};Meble\n"
+        f"Stół;300,00;{VALID_EAN};Meble\n"
+        f"Krzesło;100,00;{VALID_EAN};Meble\n"
+    )
+    source = CsvCatalogSource(_csv(rows), tenant_id="t1")
+    products = source.fetch_products()
+    assert len(products) == 1
+    assert products[0].name == "Krzesło"
+    assert products[0].wholesale_price == Decimal("100.00")
+    assert sum("duplicate EAN" in w for w in source.warnings) == 2
 
 
 def test_missing_category_defaults_to_uncategorized():
@@ -101,6 +126,22 @@ def test_zero_pads_valid_upc_a_barcode_to_ean13():
     assert len(products) == 1
     assert products[0].ean == PADDED_UPC_A
     assert len(products[0].ean) == 13
+
+
+def test_external_id_falls_back_to_row_index_without_sku_column():
+    source = CsvCatalogSource(_csv(f"Łóżko;100,00;{VALID_EAN};Meble\n"), tenant_id="t1")
+    products = source.fetch_products()
+    assert len(products) == 1
+    assert products[0].external_id == "2"
+
+
+def test_external_id_uses_sku_column_when_present():
+    header = "SKU;Nazwa;Cena hurtowa;EAN;Kategoria\n"
+    row = f"ABC-123;Łóżko;100,00;{VALID_EAN};Meble\n"
+    source = CsvCatalogSource((header + row).encode("utf-8"), tenant_id="t1")
+    products = source.fetch_products()
+    assert len(products) == 1
+    assert products[0].external_id == "ABC-123"
 
 
 def test_parses_bom_prefixed_csv_end_to_end():

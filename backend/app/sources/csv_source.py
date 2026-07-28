@@ -41,7 +41,11 @@ class CsvCatalogSource:
 
         mapping = self.column_mapping or detect_column_mapping(list(reader.fieldnames))
 
-        seen_eans: set[str] = set()
+        # Maps a seen EAN to its product's index in `products`, so a later
+        # duplicate that turns out to be cheaper can overwrite the kept
+        # product in place (preserving first-occurrence ordering) rather than
+        # being appended as a second entry.
+        seen_eans: dict[str, int] = {}
         products: list[Product] = []
 
         for row_index, row in enumerate(reader, start=2):
@@ -76,24 +80,39 @@ class CsvCatalogSource:
                         f"Row {row_index}: invalid EAN checksum '{raw_ean}', ean cleared"
                     )
 
-            if ean is not None:
-                if ean in seen_eans:
-                    self.warnings.append(f"Row {row_index}: duplicate EAN '{ean}', skipped")
-                    continue
-                seen_eans.add(ean)
+            raw_sku = (row.get(mapping.sku) or "").strip() if mapping.sku else ""
+            external_id = raw_sku or str(row_index)
 
-            products.append(
-                Product(
-                    tenant_id=self.tenant_id,
-                    source=self.SOURCE_NAME,
-                    external_id=str(row_index),
-                    variant_id=None,
-                    name=name,
-                    ean=ean,
-                    wholesale_price=wholesale_price,
-                    currency=self.default_currency,
-                    category=category,
-                )
+            product = Product(
+                tenant_id=self.tenant_id,
+                source=self.SOURCE_NAME,
+                external_id=external_id,
+                variant_id=None,
+                name=name,
+                ean=ean,
+                wholesale_price=wholesale_price,
+                currency=self.default_currency,
+                category=category,
             )
+
+            if ean is not None and ean in seen_eans:
+                existing_index = seen_eans[ean]
+                existing_price = products[existing_index].wholesale_price
+                if wholesale_price < existing_price:
+                    self.warnings.append(
+                        f"Row {row_index}: duplicate EAN '{ean}', replaced previously kept "
+                        f"product (price {existing_price}) with this cheaper row (price {wholesale_price})"
+                    )
+                    products[existing_index] = product
+                else:
+                    self.warnings.append(
+                        f"Row {row_index}: duplicate EAN '{ean}', dropped (price {wholesale_price} "
+                        f"not cheaper than kept price {existing_price})"
+                    )
+                continue
+
+            products.append(product)
+            if ean is not None:
+                seen_eans[ean] = len(products) - 1
 
         return products
