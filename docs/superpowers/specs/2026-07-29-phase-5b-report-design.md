@@ -65,7 +65,11 @@ Check order: `NOT_CHECKED` (status != DONE) → `NO_OFFER` (offer is None) → `
 `calculate_margin_matrix(record.product.wholesale_price, record.offer.price, cost_config)`.
 
 Both aggregation and the product list below call this same function per record — there is exactly
-one place that decides whether a product counts.
+one place that decides whether a product counts. `calculate_margin_matrix` can in principle raise
+`UndefinedMarginError` (zero sale price); in practice this can't happen here because the provider
+layer already rejects non-positive offer prices before they're ever persisted, so no separate
+`ExclusionReason` is defined for it — if it ever did fire, that's a bug to surface, not a state to
+render.
 
 **`aggregate.py`** — `build_summary(records: Iterable[ScanProductRecord], cost_config: CostConfig) ->
 ReportSummary`. One pass over all records, calling `evaluate_record` on each and accumulating:
@@ -100,10 +104,13 @@ class ReportSummary:
     scenario_matrix: tuple[ScenarioRow, ...]
 ```
 
+Invariant: `counts.total == counts.computable + counts.not_checked + counts.no_offer +
+counts.currency_mismatch + counts.anomaly` — every record lands in exactly one bucket.
+
 **`products.py`** — `list_product_rows(records, cost_config, *, category=None, status=None, sort=...,
 page, page_size) -> ProductPage`. Runs `evaluate_record` over all records, filters by category and/or
-`status` (matches `computable` or one `ExclusionReason` value), sorts (`category_name` [default],
-`margin_asc`, `margin_desc`, `name`), then slices to the requested page. Each row exposes the full
+`status` (matches `computable` or one `ExclusionReason` value), sorts (`category` [default — category
+then name], `margin_asc`, `margin_desc`, `name`), then slices to the requested page. Each row exposes the full
 `ProductEvaluation` plus the underlying `OfferResult` fields needed for drill-down display (`seller`,
 `source_url`, `delivery_days`, `confidence`, `citations`).
 
