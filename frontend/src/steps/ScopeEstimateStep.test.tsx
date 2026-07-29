@@ -114,6 +114,53 @@ describe('ScopeEstimateStep', () => {
     expect(screen.queryByText(/nakładają się/i)).not.toBeInTheDocument()
   })
 
+  it('disables all scope fields while an estimate request is in flight, closing the field-change race', async () => {
+    let resolveCreateScan!: (value: typeof CREATE_RESULT) => void
+    const createScanSpy = vi.spyOn(client, 'createScan').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCreateScan = resolve
+        }),
+    )
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
+    await waitFor(() => expect(createScanSpy).toHaveBeenCalledTimes(1))
+
+    // While the request is pending, every field that feeds the scope config
+    // must be disabled — otherwise the user could change the config before
+    // this in-flight response resolves, and the stale response would still
+    // land in `result`.
+    expect(screen.getByLabelText('Pełny skan')).toBeDisabled()
+    expect(screen.getByLabelText('Próbka per kategoria')).toBeDisabled()
+    expect(screen.getByLabelText(/limit czasu dostawy/i)).toBeDisabled()
+    expect(screen.getByLabelText(/limit współbieżności/i)).toBeDisabled()
+    expect(screen.getByLabelText(/próg nieświeżości/i)).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Oszacuj koszt' })).toBeDisabled()
+
+    resolveCreateScan(CREATE_RESULT)
+
+    expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Pełny skan')).not.toBeDisabled()
+  })
+
+  // Note on the request-id guard (defense in depth in handleEstimate, see
+  // ScopeEstimateStep.tsx): a black-box test that forces two overlapping
+  // requests through the public button was attempted and found impossible to
+  // trigger. React's synthetic event system checks its OWN `disabled` prop
+  // (tracked from `isEstimating`/`isStarting` state) before dispatching a
+  // click handler — even manually removing the `disabled` attribute from the
+  // live DOM node does not let a second click through, because React reads
+  // its fiber's memoized prop, not the DOM attribute. Since `handleEstimate`
+  // is only reachable from that one button, there is currently no code path
+  // that can invoke it a second time while a request is in flight. This is
+  // reassuring evidence that the disabling fix above fully closes the race
+  // in practice; the request-id guard remains as cheap insurance against a
+  // future code path that might call `handleEstimate` from somewhere else or
+  // re-enable the button prematurely, but exercising it would require
+  // exporting internal implementation details purely for testability, which
+  // isn't warranted for an unreachable-today safety net.
+
   it('shows the API error message when creating the scan fails', async () => {
     const { ApiError } = await import('../api/types')
     vi.spyOn(client, 'createScan').mockRejectedValue(

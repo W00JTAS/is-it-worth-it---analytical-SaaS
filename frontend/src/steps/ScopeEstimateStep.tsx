@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createScan, startScan } from '../api/client'
 import { ApiError } from '../api/types'
 import type { CreateScanResult, ScopeType } from '../api/types'
@@ -29,6 +29,12 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
   const [error, setError] = useState<string | null>(null)
   const [isEstimating, setIsEstimating] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
+  // Guards against a stale `createScan` response overwriting a newer one. The
+  // fields are disabled while a request is in flight (see `isEstimating`
+  // below), which is the primary fix — this counter is defense in depth in
+  // case that disabling is ever bypassed or removed.
+  const estimateRequestIdRef = useRef(0)
+  const fieldsDisabled = isEstimating || isStarting
 
   // Any change to the scope config after an estimate exists invalidates that
   // estimate — clear it (and the refresh choice tied to it) so the UI can't
@@ -64,6 +70,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
   }
 
   async function handleEstimate() {
+    const requestId = ++estimateRequestIdRef.current
     setError(null)
     setIsEstimating(true)
     try {
@@ -75,11 +82,20 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
         maxConcurrency,
         stalenessThresholdDays,
       })
-      setResult(created)
+      // Discard this response if a newer request has since superseded it —
+      // otherwise a stale estimate could win the race and be shown/started
+      // against a config the user has since changed.
+      if (estimateRequestIdRef.current === requestId) {
+        setResult(created)
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Nie udało się oszacować kosztu')
+      if (estimateRequestIdRef.current === requestId) {
+        setError(err instanceof ApiError ? err.message : 'Nie udało się oszacować kosztu')
+      }
     } finally {
-      setIsEstimating(false)
+      if (estimateRequestIdRef.current === requestId) {
+        setIsEstimating(false)
+      }
     }
   }
 
@@ -108,6 +124,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
             name="scope"
             checked={scopeType === 'full'}
             onChange={() => handleScopeTypeChange('full')}
+            disabled={fieldsDisabled}
           />
           Pełny skan
         </label>
@@ -117,6 +134,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
             name="scope"
             checked={scopeType === 'sample'}
             onChange={() => handleScopeTypeChange('sample')}
+            disabled={fieldsDisabled}
           />
           Próbka per kategoria
         </label>
@@ -128,6 +146,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
               min={1}
               value={samplePerCategory}
               onChange={(e) => handleSamplePerCategoryChange(e.target.value)}
+              disabled={fieldsDisabled}
               className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
             />
           </label>
@@ -141,6 +160,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
           min={1}
           value={maxDeliveryDays}
           onChange={(e) => handleMaxDeliveryDaysChange(Number(e.target.value))}
+          disabled={fieldsDisabled}
           className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
         />
       </label>
@@ -152,6 +172,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
           min={1}
           value={maxConcurrency}
           onChange={(e) => handleMaxConcurrencyChange(Number(e.target.value))}
+          disabled={fieldsDisabled}
           className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
         />
       </label>
@@ -163,6 +184,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
           min={0}
           value={stalenessThresholdDays}
           onChange={(e) => handleStalenessThresholdChange(Number(e.target.value))}
+          disabled={fieldsDisabled}
           className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
         />
       </label>
@@ -206,6 +228,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
                 type="checkbox"
                 checked={forceRefreshStale}
                 onChange={(e) => setForceRefreshStale(e.target.checked)}
+                disabled={fieldsDisabled}
               />
               Odśwież nieświeże ({result.stale_count} {pluralizeProdukt(result.stale_count)} z nich nie
               sprawdzano od dawna)
