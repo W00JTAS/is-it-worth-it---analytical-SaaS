@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from app.cache.sqlite_cache import PriceCache
 from app.models.product import Product
 from app.providers.base import OfferResult, ProviderUnavailable
@@ -109,34 +111,36 @@ def test_product_without_ean_always_calls_provider(tmp_path):
     cache.close()
 
 
-def test_provider_unavailable_returns_none_and_is_not_cached(tmp_path):
+def test_provider_unavailable_propagates_and_is_not_cached(tmp_path):
     """A transient failure (network error / 429 / 5xx) must not be persisted as
-    a 30-day negative result — see final whole-branch review, Important 4."""
+    a 30-day negative result, and the caller must be able to tell it apart from
+    a genuine 'no offer found' — see Phase 4's job engine, which retries on this."""
     cache = PriceCache(tmp_path / "cache.sqlite3")
     provider = _UnavailableProvider()
     product = _make_product()
 
-    result = get_offer_cached(product, "PL", 5, cache, provider)
+    with pytest.raises(ProviderUnavailable):
+        get_offer_cached(product, "PL", 5, cache, provider)
 
-    assert result is None
     assert provider.call_count == 1
     # Nothing was written to the cache — a later lookup must retry, not reuse
     # a stale "not found" verdict from the transient failure.
     assert cache.get(product.ean, "PL", "perplexity", 5) is None
 
     # Confirm it genuinely retries (would be 1 forever if it had been cached).
-    get_offer_cached(product, "PL", 5, cache, provider)
+    with pytest.raises(ProviderUnavailable):
+        get_offer_cached(product, "PL", 5, cache, provider)
     assert provider.call_count == 2
     cache.close()
 
 
-def test_provider_unavailable_is_swallowed_for_product_without_ean(tmp_path):
+def test_provider_unavailable_propagates_for_product_without_ean(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
     provider = _UnavailableProvider()
     product = _make_product(ean=None)
 
-    result = get_offer_cached(product, "PL", 5, cache, provider)
+    with pytest.raises(ProviderUnavailable):
+        get_offer_cached(product, "PL", 5, cache, provider)
 
-    assert result is None
     assert provider.call_count == 1
     cache.close()
