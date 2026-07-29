@@ -46,7 +46,11 @@ export function ProgressStep({ scanId }: ProgressStepProps) {
         </p>
       )}
       {isTerminal && (
-        <p className="text-sm font-medium text-emerald-400">
+        <p
+          className={`text-sm font-medium ${
+            scan.status === 'failed' ? 'text-red-400' : 'text-emerald-400'
+          }`}
+        >
           {scan.status === 'done' ? 'Skan zakończony.' : 'Skan zakończony z błędami.'}
         </p>
       )}

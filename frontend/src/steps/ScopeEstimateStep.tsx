@@ -8,6 +8,16 @@ interface ScopeEstimateStepProps {
   onStarted: (scanId: string) => void
 }
 
+// Standard Polish plural rules for "produkt": 1 -> singular, 2-4 (excluding
+// 12-14) -> "few" form, everything else (0, 5+, 12-14) -> "many" form.
+function pluralizeProdukt(n: number): string {
+  if (n === 1) return 'produkt'
+  const lastDigit = n % 10
+  const lastTwo = n % 100
+  if (lastDigit >= 2 && lastDigit <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) return 'produkty'
+  return 'produktów'
+}
+
 export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
   const [scopeType, setScopeType] = useState<ScopeType>('full')
   const [samplePerCategory, setSamplePerCategory] = useState('50')
@@ -19,6 +29,39 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
   const [error, setError] = useState<string | null>(null)
   const [isEstimating, setIsEstimating] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
+
+  // Any change to the scope config after an estimate exists invalidates that
+  // estimate — clear it (and the refresh choice tied to it) so the UI can't
+  // show a stale estimate while `handleStart` would launch the OLD config.
+  function clearStaleEstimate() {
+    setResult(null)
+    setForceRefreshStale(false)
+  }
+
+  function handleScopeTypeChange(next: ScopeType) {
+    clearStaleEstimate()
+    setScopeType(next)
+  }
+
+  function handleSamplePerCategoryChange(value: string) {
+    clearStaleEstimate()
+    setSamplePerCategory(value)
+  }
+
+  function handleMaxDeliveryDaysChange(value: number) {
+    clearStaleEstimate()
+    setMaxDeliveryDays(value)
+  }
+
+  function handleMaxConcurrencyChange(value: number) {
+    clearStaleEstimate()
+    setMaxConcurrency(value)
+  }
+
+  function handleStalenessThresholdChange(value: number) {
+    clearStaleEstimate()
+    setStalenessThresholdDays(value)
+  }
 
   async function handleEstimate() {
     setError(null)
@@ -54,10 +97,6 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
     }
   }
 
-  const cost = forceRefreshStale
-    ? result?.estimate.cost_usd_with_refresh
-    : result?.estimate.cost_usd_without_refresh
-
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 p-8">
       <h1 className="text-xl font-semibold text-slate-100">Zakres skanu</h1>
@@ -68,7 +107,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
             type="radio"
             name="scope"
             checked={scopeType === 'full'}
-            onChange={() => setScopeType('full')}
+            onChange={() => handleScopeTypeChange('full')}
           />
           Pełny skan
         </label>
@@ -77,7 +116,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
             type="radio"
             name="scope"
             checked={scopeType === 'sample'}
-            onChange={() => setScopeType('sample')}
+            onChange={() => handleScopeTypeChange('sample')}
           />
           Próbka per kategoria
         </label>
@@ -88,7 +127,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
               type="number"
               min={1}
               value={samplePerCategory}
-              onChange={(e) => setSamplePerCategory(e.target.value)}
+              onChange={(e) => handleSamplePerCategoryChange(e.target.value)}
               className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
             />
           </label>
@@ -101,7 +140,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
           type="number"
           min={1}
           value={maxDeliveryDays}
-          onChange={(e) => setMaxDeliveryDays(Number(e.target.value))}
+          onChange={(e) => handleMaxDeliveryDaysChange(Number(e.target.value))}
           className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
         />
       </label>
@@ -112,7 +151,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
           type="number"
           min={1}
           value={maxConcurrency}
-          onChange={(e) => setMaxConcurrency(Number(e.target.value))}
+          onChange={(e) => handleMaxConcurrencyChange(Number(e.target.value))}
           className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
         />
       </label>
@@ -123,7 +162,7 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
           type="number"
           min={0}
           value={stalenessThresholdDays}
-          onChange={(e) => setStalenessThresholdDays(Number(e.target.value))}
+          onChange={(e) => handleStalenessThresholdChange(Number(e.target.value))}
           className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
         />
       </label>
@@ -144,9 +183,23 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
       {result && (
         <div className="flex flex-col gap-3 rounded-md border border-slate-700 p-4 text-sm text-slate-200">
           <p>
-            Szacowany koszt: <span className="font-semibold">{cost} USD</span>
+            Bez odświeżania:{' '}
+            <span className="font-semibold">
+              {result.estimate.cost_usd_without_refresh} USD (~{result.estimate.seconds_without_refresh}s)
+            </span>
           </p>
-          <p>{result.overlapping_count} produkty w tym skanie nakładają się z poprzednimi skanami.</p>
+          <p>
+            Z odświeżaniem:{' '}
+            <span className="font-semibold">
+              {result.estimate.cost_usd_with_refresh} USD (~{result.estimate.seconds_with_refresh}s)
+            </span>
+          </p>
+          {result.overlapping_count > 0 && (
+            <p>
+              {result.overlapping_count} {pluralizeProdukt(result.overlapping_count)} w tym skanie
+              nakładają się z poprzednimi skanami.
+            </p>
+          )}
           {result.stale_count > 0 && (
             <label className="flex items-center gap-2">
               <input
@@ -154,7 +207,8 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
                 checked={forceRefreshStale}
                 onChange={(e) => setForceRefreshStale(e.target.checked)}
               />
-              Odśwież nieświeże ({result.stale_count} z nich nie sprawdzano od dawna)
+              Odśwież nieświeże ({result.stale_count} {pluralizeProdukt(result.stale_count)} z nich nie
+              sprawdzano od dawna)
             </label>
           )}
           {result.warnings.length > 0 && (

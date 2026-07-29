@@ -53,6 +53,28 @@ describe('ProgressStep', () => {
     expect(screen.getByText('20 / 20')).toBeInTheDocument()
   })
 
+  it('shows a distinct, non-success treatment when status is failed', () => {
+    mockScanEvents({
+      scan: {
+        scan_id: 'scan-1', status: 'failed', scope_type: 'full',
+        total_products: 20, completed_products: 12,
+        estimate: {
+          queries_without_refresh: 20, queries_with_refresh: 20,
+          cost_usd_without_refresh: '0.20', cost_usd_with_refresh: '0.20',
+          seconds_without_refresh: 10, seconds_with_refresh: 10,
+        },
+        overlapping_count: 0, stale_count: 0,
+      },
+    })
+
+    render(<ProgressStep scanId="scan-1" />)
+
+    const failedMessage = screen.getByText(/skan zakończony z błędami/i)
+    expect(failedMessage).toBeInTheDocument()
+    expect(failedMessage.className).toContain('text-red-400')
+    expect(failedMessage.className).not.toContain('text-emerald-400')
+  })
+
   it('shows a polling indicator when the source falls back to polling', () => {
     mockScanEvents({
       source: 'polling',

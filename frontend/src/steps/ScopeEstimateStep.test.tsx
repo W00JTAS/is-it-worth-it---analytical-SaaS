@@ -48,9 +48,12 @@ describe('ScopeEstimateStep', () => {
       maxConcurrency: 5,
       stalenessThresholdDays: 14,
     })
-    expect(await screen.findByText('0.08 USD')).toBeInTheDocument()
+    expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
+    expect(screen.getByText(/0\.08 USD.*~4s/)).toBeInTheDocument()
+    expect(screen.getByText(/z odświeżaniem/i)).toBeInTheDocument()
+    expect(screen.getByText(/0\.10 USD.*~5s/)).toBeInTheDocument()
     expect(screen.getByText(/2 produkty.*nakładają się/i)).toBeInTheDocument()
-    expect(screen.getByText(/1 z nich nie sprawdzano/i)).toBeInTheDocument()
+    expect(screen.getByText(/1 produkt z nich nie sprawdzano/i)).toBeInTheDocument()
     expect(screen.getByText(/invalid EAN checksum/)).toBeInTheDocument()
   })
 
@@ -78,12 +81,37 @@ describe('ScopeEstimateStep', () => {
     render(<ScopeEstimateStep file={FILE} onStarted={onStarted} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
-    await screen.findByText('0.08 USD')
+    await screen.findByText(/bez odświeżania/i)
     await userEvent.click(screen.getByLabelText(/odśwież nieświeże/i))
     await userEvent.click(screen.getByRole('button', { name: 'Uruchom skan' }))
 
     await waitFor(() => expect(startScanSpy).toHaveBeenCalledWith('scan-1', true))
     expect(onStarted).toHaveBeenCalledWith('scan-1')
+  })
+
+  it('clears a stale estimate when the scope config changes afterward', async () => {
+    const createScanSpy = vi.spyOn(client, 'createScan').mockResolvedValue(CREATE_RESULT)
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
+    expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByLabelText('Próbka per kategoria'))
+
+    expect(screen.queryByText(/bez odświeżania/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/0\.08 USD/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Oszacuj koszt' })).toBeInTheDocument()
+    expect(createScanSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not show the overlap line when overlapping_count is zero', async () => {
+    vi.spyOn(client, 'createScan').mockResolvedValue({ ...CREATE_RESULT, overlapping_count: 0 })
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
+
+    expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
+    expect(screen.queryByText(/nakładają się/i)).not.toBeInTheDocument()
   })
 
   it('shows the API error message when creating the scan fails', async () => {

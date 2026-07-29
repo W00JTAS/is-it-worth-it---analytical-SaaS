@@ -41,7 +41,7 @@ describe('App (ScanWizard)', () => {
 
     await screen.findByRole('heading', { name: 'Zakres skanu' })
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
-    await screen.findByText('0.05 USD')
+    await screen.findByText(/bez odświeżania/i)
     await userEvent.click(screen.getByRole('button', { name: 'Uruchom skan' }))
 
     await screen.findByRole('heading', { name: 'Przebieg skanu' })

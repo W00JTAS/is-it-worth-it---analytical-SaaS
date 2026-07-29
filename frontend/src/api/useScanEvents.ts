@@ -37,6 +37,7 @@ export function useScanEvents(scanId: string | null): ScanEventsState {
       flushSync(() => setSource('polling'))
       const poll = async () => {
         try {
+          // safe: the effect returns early above when scanId is null
           const result = await getScan(scanId as string)
           if (cancelled) return
           flushSync(() => {
