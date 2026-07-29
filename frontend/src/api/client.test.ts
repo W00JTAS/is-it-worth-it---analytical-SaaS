@@ -1,0 +1,142 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from './types'
+import { createScan, getScan, startScan } from './client'
+import type { ScopeConfig } from './types'
+
+const SCAN_JSON = {
+  scan_id: 'scan-1',
+  status: 'estimated',
+  scope_type: 'full',
+  total_products: 10,
+  completed_products: 0,
+  estimate: {
+    queries_without_refresh: 8,
+    queries_with_refresh: 10,
+    cost_usd_without_refresh: '0.08',
+    cost_usd_with_refresh: '0.10',
+    seconds_without_refresh: 4.0,
+    seconds_with_refresh: 5.0,
+  },
+  overlapping_count: 2,
+  stale_count: 2,
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+const FULL_SCOPE: ScopeConfig = {
+  scopeType: 'full',
+  market: 'PL',
+  maxDeliveryDays: 5,
+  maxConcurrency: 5,
+  stalenessThresholdDays: 14,
+}
+
+describe('createScan', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('posts multipart form data with the file and scope fields', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...SCAN_JSON, warnings: [] }))
+    const file = new File(['a,b\n1,2'], 'catalog.csv', { type: 'text/csv' })
+
+    const result = await createScan(file, FULL_SCOPE)
+
+    expect(result.scan_id).toBe('scan-1')
+    expect(result.warnings).toEqual([])
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/scans')
+    expect(init?.method).toBe('POST')
+    const body = init?.body as FormData
+    expect(body.get('file')).toBeInstanceOf(File)
+    expect(body.get('scope_type')).toBe('full')
+    expect(body.get('market')).toBe('PL')
+    expect(body.get('max_delivery_days')).toBe('5')
+    expect(body.get('max_concurrency')).toBe('5')
+    expect(body.get('staleness_threshold_days')).toBe('14')
+  })
+
+  it('includes sample_per_category only when the scope is a sample', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...SCAN_JSON, warnings: [] }))
+    const file = new File(['a,b\n1,2'], 'catalog.csv', { type: 'text/csv' })
+
+    await createScan(file, { ...FULL_SCOPE, scopeType: 'sample', samplePerCategory: 50 })
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]
+    const body = init?.body as FormData
+    expect(body.get('scope_type')).toBe('sample')
+    expect(body.get('sample_per_category')).toBe('50')
+  })
+
+  it('throws ApiError with the backend detail message on a 400', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ detail: 'max_concurrency must be >= 1, got 0' }, 400),
+    )
+    const file = new File(['a,b\n1,2'], 'catalog.csv', { type: 'text/csv' })
+
+    await expect(createScan(file, FULL_SCOPE)).rejects.toMatchObject({
+      message: 'max_concurrency must be >= 1, got 0',
+      status: 400,
+    })
+    await expect(createScan(file, FULL_SCOPE)).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('startScan', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('posts force_refresh_stale as JSON to the scan-specific start endpoint', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ status: 'running' }))
+
+    await startScan('scan-1', true)
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/scans/scan-1/start')
+    expect(init?.method).toBe('POST')
+    expect(init?.headers).toMatchObject({ 'Content-Type': 'application/json' })
+    expect(JSON.parse(init?.body as string)).toEqual({ force_refresh_stale: true })
+  })
+
+  it('throws ApiError with status 409 when the scan is already running', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ detail: 'scan already running' }, 409))
+
+    await expect(startScan('scan-1', false)).rejects.toMatchObject({ status: 409 })
+  })
+})
+
+describe('getScan', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('fetches the scan by id', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(SCAN_JSON))
+
+    const result = await getScan('scan-1')
+
+    expect(result).toEqual(SCAN_JSON)
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/scans/scan-1')
+  })
+
+  it('throws ApiError with status 404 for an unknown scan', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ detail: 'scan not found' }, 404))
+
+    await expect(getScan('missing')).rejects.toMatchObject({ status: 404 })
+  })
+})
