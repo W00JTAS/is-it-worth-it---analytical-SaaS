@@ -130,5 +130,18 @@ class PriceCache:
                 )
             self._conn.commit()
 
+    def invalidate(
+        self, ean: str, market: str, provider: str, max_delivery_days: int
+    ) -> None:
+        with self._lock:
+            self._conn.execute(
+                """
+                DELETE FROM price_cache
+                WHERE ean = ? AND market = ? AND provider = ? AND max_delivery_days = ?
+                """,
+                (ean, market, provider, max_delivery_days),
+            )
+            self._conn.commit()
+
     def close(self) -> None:
         self._conn.close()

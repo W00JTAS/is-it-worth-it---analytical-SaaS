@@ -103,3 +103,23 @@ def test_get_and_set_work_from_a_different_thread(tmp_path):
     assert entry is not None
     assert entry.offer == offer
     cache.close()
+
+
+def test_invalidate_removes_a_cached_entry(tmp_path):
+    cache = PriceCache(tmp_path / "cache.sqlite3")
+    offer = _make_offer()
+    cache.set("5901234123457", "PL", "perplexity", 5, offer)
+
+    cache.invalidate("5901234123457", "PL", "perplexity", 5)
+
+    assert cache.get("5901234123457", "PL", "perplexity", 5) is None
+    cache.close()
+
+
+def test_invalidate_on_missing_entry_is_a_no_op(tmp_path):
+    cache = PriceCache(tmp_path / "cache.sqlite3")
+
+    cache.invalidate("5901234123457", "PL", "perplexity", 5)  # must not raise
+
+    assert cache.get("5901234123457", "PL", "perplexity", 5) is None
+    cache.close()
