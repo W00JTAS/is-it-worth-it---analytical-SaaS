@@ -51,13 +51,16 @@ def test_scan_holds_all_fields():
         sample_per_category=50, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
         total_products=100, completed_products=0,
-        estimate=_make_estimate(), created_at=1700000000.0,
+        estimate=_make_estimate(), overlapping_count=5, stale_count=2,
+        created_at=1700000000.0,
     )
     assert scan.id == "scan-1"
     assert scan.status == ScanStatus.ESTIMATED
     assert scan.scope_type == "sample"
     assert scan.sample_per_category == 50
     assert scan.estimate.queries_without_refresh == 10
+    assert scan.overlapping_count == 5
+    assert scan.stale_count == 2
 
 
 def test_scan_product_record_holds_all_fields():

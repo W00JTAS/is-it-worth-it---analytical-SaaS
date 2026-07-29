@@ -57,6 +57,10 @@ def test_create_scan_detects_overlap_and_staleness_against_existing_cache(tmp_pa
     scan = store.get_scan(scan_id)
     # One product already has a fresh cache entry -> only 1 real query needed.
     assert scan.estimate.queries_without_refresh == 1
+    # The overlap itself (Task 6's StalenessReport) must be persisted and
+    # readable back, not just used internally to compute the cost estimate.
+    assert scan.overlapping_count == 1
+    assert scan.stale_count == 0
     store.close()
     cache.close()
 

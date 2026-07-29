@@ -50,6 +50,8 @@ class Scan:
     total_products: int
     completed_products: int
     estimate: CostEstimate
+    overlapping_count: int
+    stale_count: int
     created_at: float
 
 

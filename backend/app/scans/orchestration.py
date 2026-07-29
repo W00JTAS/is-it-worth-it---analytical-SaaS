@@ -61,4 +61,6 @@ def create_scan(
         products=scoped_products,
         stale_external_ids=staleness.stale_external_ids,
         estimate=estimate,
+        overlapping_count=staleness.overlapping_count,
+        stale_count=len(staleness.stale_external_ids),
     )

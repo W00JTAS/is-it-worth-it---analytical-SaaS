@@ -37,6 +37,7 @@ def test_create_scan_persists_scan_and_products(tmp_path):
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
         products=products, stale_external_ids=(), estimate=estimate,
+        overlapping_count=0, stale_count=0,
     )
 
     scan = store.get_scan(scan_id)
@@ -62,11 +63,19 @@ def test_stale_products_are_flagged_on_creation(tmp_path):
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
         products=products, stale_external_ids=("2",), estimate=estimate,
+        overlapping_count=1, stale_count=1,
     )
 
     pending = {p.product.external_id: p for p in store.list_pending(scan_id)}
     assert pending["1"].was_stale is False
     assert pending["2"].was_stale is True
+
+    # overlapping_count/stale_count must round-trip through get_scan, not just
+    # be accepted and discarded (this is the whole point of Task 6's staleness
+    # analysis reaching API consumers).
+    scan = store.get_scan(scan_id)
+    assert scan.overlapping_count == 1
+    assert scan.stale_count == 1
     store.close()
 
 
@@ -83,6 +92,7 @@ def test_start_scan_sets_status_running(tmp_path):
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
         products=[_make_product()], stale_external_ids=(), estimate=estimate,
+        overlapping_count=0, stale_count=0,
     )
 
     store.start_scan(scan_id)
@@ -98,6 +108,7 @@ def test_mark_done_updates_status_offer_and_progress_count(tmp_path):
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
         products=[_make_product()], stale_external_ids=(), estimate=estimate,
+        overlapping_count=0, stale_count=0,
     )
     record = store.list_pending(scan_id)[0]
     offer = _make_offer()
@@ -116,6 +127,7 @@ def test_mark_skipped_updates_status_and_progress_without_counting_as_pending(tm
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
         products=[_make_product()], stale_external_ids=("1",), estimate=estimate,
+        overlapping_count=0, stale_count=0,
     )
     record = store.list_pending(scan_id)[0]
     offer = _make_offer()
@@ -134,6 +146,7 @@ def test_finalize_scan_is_done_when_nothing_pending(tmp_path):
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
         products=[_make_product()], stale_external_ids=(), estimate=estimate,
+        overlapping_count=0, stale_count=0,
     )
     store.mark_done(store.list_pending(scan_id)[0].id, _make_offer())
 
@@ -151,6 +164,7 @@ def test_finalize_scan_is_failed_when_products_still_pending(tmp_path):
         max_concurrency=5, staleness_threshold_days=14,
         products=[_make_product(external_id="1"), _make_product(external_id="2")],
         stale_external_ids=(), estimate=estimate,
+        overlapping_count=0, stale_count=0,
     )
     store.mark_done(store.list_pending(scan_id)[0].id, _make_offer())
     # One product ("2") is still pending.

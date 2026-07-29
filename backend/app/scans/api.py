@@ -72,6 +72,8 @@ def _scan_to_dict(scan) -> dict:
         "total_products": scan.total_products,
         "completed_products": scan.completed_products,
         "estimate": _estimate_to_dict(scan.estimate),
+        "overlapping_count": scan.overlapping_count,
+        "stale_count": scan.stale_count,
     }
 
 

@@ -68,6 +68,33 @@ def test_post_scans_creates_an_estimated_scan_without_starting_it(tmp_path):
     assert store.get_scan(body["scan_id"]).status.value == "estimated"
 
 
+def test_post_scans_response_includes_overlapping_and_stale_counts(tmp_path):
+    # Task 6's StalenessReport (overlapping_count / stale_external_ids) must
+    # reach the API response, not just be discarded after computing the cost
+    # estimate. Pre-seed the cache so one product overlaps an existing entry.
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    cache.set(
+        "5901234123457", "PL", "perplexity", 5,
+        OfferResult(
+            price=Decimal("15.00"), currency="PLN", seller="Shop",
+            source_url="https://example.com/x", delivery_days=2,
+            confidence=0.9, citations=(), raw_response="{}",
+        ),
+    )
+
+    response = client.post(
+        "/scans",
+        files={"file": ("catalog.csv", io.BytesIO(CSV_BYTES), "text/csv")},
+        data={"scope_type": "full"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["overlapping_count"] == 1
+    assert body["stale_count"] == 0
+
+
 def test_get_scans_returns_404_for_unknown_id(tmp_path):
     app, store, cache = _make_app(tmp_path)
     client = TestClient(app)

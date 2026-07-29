@@ -47,6 +47,8 @@ class ScanStore:
                 cost_usd_with_refresh TEXT NOT NULL,
                 seconds_without_refresh REAL NOT NULL,
                 seconds_with_refresh REAL NOT NULL,
+                overlapping_count INTEGER NOT NULL,
+                stale_count INTEGER NOT NULL,
                 created_at REAL NOT NULL
             )
             """
@@ -92,6 +94,8 @@ class ScanStore:
         products: list[Product],
         stale_external_ids: tuple[str, ...],
         estimate: CostEstimate,
+        overlapping_count: int,
+        stale_count: int,
     ) -> str:
         scan_id = str(uuid.uuid4())
         stale_set = set(stale_external_ids)
@@ -103,15 +107,17 @@ class ScanStore:
                     max_concurrency, staleness_threshold_days, total_products,
                     queries_without_refresh, queries_with_refresh,
                     cost_usd_without_refresh, cost_usd_with_refresh,
-                    seconds_without_refresh, seconds_with_refresh, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    seconds_without_refresh, seconds_with_refresh,
+                    overlapping_count, stale_count, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     scan_id, ScanStatus.ESTIMATED.value, scope_type, sample_per_category,
                     market, max_delivery_days, max_concurrency, staleness_threshold_days,
                     len(products), estimate.queries_without_refresh, estimate.queries_with_refresh,
                     str(estimate.cost_usd_without_refresh), str(estimate.cost_usd_with_refresh),
-                    estimate.seconds_without_refresh, estimate.seconds_with_refresh, time.time(),
+                    estimate.seconds_without_refresh, estimate.seconds_with_refresh,
+                    overlapping_count, stale_count, time.time(),
                 ),
             )
             for product in products:
@@ -141,7 +147,8 @@ class ScanStore:
                        max_concurrency, staleness_threshold_days, total_products,
                        queries_without_refresh, queries_with_refresh,
                        cost_usd_without_refresh, cost_usd_with_refresh,
-                       seconds_without_refresh, seconds_with_refresh, created_at
+                       seconds_without_refresh, seconds_with_refresh,
+                       overlapping_count, stale_count, created_at
                 FROM scans WHERE id = ?
                 """,
                 (scan_id,),
@@ -153,7 +160,8 @@ class ScanStore:
                 max_concurrency, staleness_threshold_days, total_products,
                 queries_without_refresh, queries_with_refresh,
                 cost_usd_without_refresh, cost_usd_with_refresh,
-                seconds_without_refresh, seconds_with_refresh, created_at,
+                seconds_without_refresh, seconds_with_refresh,
+                overlapping_count, stale_count, created_at,
             ) = row
 
             completed_products = self._conn.execute(
@@ -180,6 +188,8 @@ class ScanStore:
                 seconds_without_refresh=seconds_without_refresh,
                 seconds_with_refresh=seconds_with_refresh,
             ),
+            overlapping_count=overlapping_count,
+            stale_count=stale_count,
             created_at=created_at,
         )
 
