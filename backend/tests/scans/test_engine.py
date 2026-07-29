@@ -1,4 +1,5 @@
 import asyncio
+import time
 from decimal import Decimal
 
 import pytest
@@ -50,6 +51,11 @@ class _ScriptedProvider:
         self.max_in_flight = max(self.max_in_flight, self._in_flight)
         try:
             self.call_count += 1
+            # Simulate real work so overlapping asyncio.to_thread workers
+            # actually have a chance to coexist — without this delay, calls
+            # complete so fast that genuine concurrency rarely materializes,
+            # and this test would pass even with the semaphore removed.
+            time.sleep(0.01)
             outcome = self._script[product.ean]
             if isinstance(outcome, Exception):
                 raise outcome
