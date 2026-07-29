@@ -23,12 +23,17 @@ def create_scan(
     store: ScanStore,
     cache: PriceCache,
     provider_name: str,
-) -> str:
+) -> tuple[str, list[str]]:
     source = CsvCatalogSource(csv_bytes, tenant_id=tenant_id)
     all_products = source.fetch_products()
 
     if scope_type == "sample":
-        assert sample_per_category is not None
+        if sample_per_category is None:
+            # Defense in depth: the API layer (post_scans) already validates
+            # this before calling create_scan, but `assert` is stripped under
+            # `python -O`, and orchestration.py could in principle be called
+            # from somewhere other than the API layer later.
+            raise ValueError("sample_per_category is required when scope_type is 'sample'")
         products_by_category = group_by_category(all_products)
         scoped_products = resolve_sample_scope(
             products_by_category, sample_per_category, sample_seed
@@ -47,11 +52,11 @@ def create_scan(
     )
     estimate = estimate_cost(
         cache_misses=cache_misses,
-        stale_count=len(staleness.stale_external_ids),
+        stale_count=len(staleness.stale_eans),
         max_concurrency=max_concurrency,
     )
 
-    return store.create_scan(
+    scan_id = store.create_scan(
         scope_type=scope_type,
         sample_per_category=sample_per_category,
         market=market,
@@ -59,8 +64,9 @@ def create_scan(
         max_concurrency=max_concurrency,
         staleness_threshold_days=staleness_threshold_days,
         products=scoped_products,
-        stale_external_ids=staleness.stale_external_ids,
+        stale_eans=staleness.stale_eans,
         estimate=estimate,
         overlapping_count=staleness.overlapping_count,
-        stale_count=len(staleness.stale_external_ids),
+        stale_count=len(staleness.stale_eans),
     )
+    return scan_id, source.warnings

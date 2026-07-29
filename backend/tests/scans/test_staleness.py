@@ -35,7 +35,7 @@ def test_product_with_no_prior_cache_entry_is_not_overlapping(tmp_path):
     report = analyze_staleness([product], cache, "PL", "perplexity", 5, staleness_threshold_days=14)
 
     assert report.overlapping_count == 0
-    assert report.stale_external_ids == ()
+    assert report.stale_eans == ()
     cache.close()
 
 
@@ -47,7 +47,7 @@ def test_product_with_fresh_cache_entry_overlaps_but_is_not_stale(tmp_path):
     report = analyze_staleness([product], cache, "PL", "perplexity", 5, staleness_threshold_days=14)
 
     assert report.overlapping_count == 1
-    assert report.stale_external_ids == ()
+    assert report.stale_eans == ()
     cache.close()
 
 
@@ -66,7 +66,7 @@ def test_product_with_old_cache_entry_is_stale(tmp_path):
     report = analyze_staleness([product], cache, "PL", "perplexity", 5, staleness_threshold_days=14)
 
     assert report.overlapping_count == 1
-    assert report.stale_external_ids == (product.external_id,)
+    assert report.stale_eans == (product.ean,)
     cache.close()
 
 
@@ -77,5 +77,5 @@ def test_product_without_ean_is_never_counted(tmp_path):
     report = analyze_staleness([product], cache, "PL", "perplexity", 5, staleness_threshold_days=14)
 
     assert report.overlapping_count == 0
-    assert report.stale_external_ids == ()
+    assert report.stale_eans == ()
     cache.close()

@@ -18,7 +18,6 @@ class ScanStatus(str, Enum):
 class ProductStatus(str, Enum):
     PENDING = "pending"
     DONE = "done"
-    SKIPPED = "skipped"
 
 
 @dataclass(frozen=True)
@@ -34,7 +33,12 @@ class CostEstimate:
 @dataclass(frozen=True)
 class StalenessReport:
     overlapping_count: int
-    stale_external_ids: tuple[str, ...]
+    # Keyed by EAN, not external_id: external_id (SKU, or a row-index fallback)
+    # is not guaranteed unique across a scan's products, so joining staleness
+    # back onto products by external_id could flag the wrong product as stale.
+    # EAN *is* guaranteed unique within one scan's product list, since
+    # CsvCatalogSource already deduplicates by EAN at parse time.
+    stale_eans: tuple[str, ...]
 
 
 @dataclass(frozen=True)

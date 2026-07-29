@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from app.cache.sqlite_cache import PriceCache
 from app.providers.base import OfferResult
 from app.scans.models import ScanStatus
@@ -28,7 +30,7 @@ def test_create_scan_full_scope_persists_all_products_and_estimates_cost(tmp_pat
     store = ScanStore(tmp_path / "app.sqlite3")
     cache = PriceCache(tmp_path / "app.sqlite3")
 
-    scan_id = create_scan(
+    scan_id, warnings = create_scan(
         csv_bytes=CSV_BYTES, tenant_id="t1", scope_type="full", sample_per_category=None,
         sample_seed=1, market="PL", max_delivery_days=5, max_concurrency=5,
         staleness_threshold_days=14, store=store, cache=cache, provider_name="perplexity",
@@ -48,7 +50,7 @@ def test_create_scan_detects_overlap_and_staleness_against_existing_cache(tmp_pa
     cache = PriceCache(tmp_path / "app.sqlite3")
     cache.set("5901234123457", "PL", "perplexity", 5, _make_offer())
 
-    scan_id = create_scan(
+    scan_id, warnings = create_scan(
         csv_bytes=CSV_BYTES, tenant_id="t1", scope_type="full", sample_per_category=None,
         sample_seed=1, market="PL", max_delivery_days=5, max_concurrency=5,
         staleness_threshold_days=14, store=store, cache=cache, provider_name="perplexity",
@@ -69,7 +71,7 @@ def test_create_scan_sample_scope_applies_water_filling(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     cache = PriceCache(tmp_path / "app.sqlite3")
 
-    scan_id = create_scan(
+    scan_id, warnings = create_scan(
         csv_bytes=CSV_BYTES, tenant_id="t1", scope_type="sample", sample_per_category=1,
         sample_seed=1, market="PL", max_delivery_days=5, max_concurrency=5,
         staleness_threshold_days=14, store=store, cache=cache, provider_name="perplexity",
@@ -79,5 +81,46 @@ def test_create_scan_sample_scope_applies_water_filling(tmp_path):
     # Both categories ("Elektronika", "Dom") have exactly 1 product each, and
     # the target is 1 per category -> both are fully included either way.
     assert scan.total_products == 2
+    store.close()
+    cache.close()
+
+
+def test_create_scan_sample_scope_without_sample_per_category_raises(tmp_path):
+    # Defense in depth: the API layer validates this before calling
+    # create_scan, but orchestration.py must not silently rely on an `assert`
+    # (stripped under `python -O`) in case it's ever called from elsewhere.
+    store = ScanStore(tmp_path / "app.sqlite3")
+    cache = PriceCache(tmp_path / "app.sqlite3")
+
+    with pytest.raises(ValueError):
+        create_scan(
+            csv_bytes=CSV_BYTES, tenant_id="t1", scope_type="sample", sample_per_category=None,
+            sample_seed=1, market="PL", max_delivery_days=5, max_concurrency=5,
+            staleness_threshold_days=14, store=store, cache=cache, provider_name="perplexity",
+        )
+    store.close()
+    cache.close()
+
+
+def test_create_scan_surfaces_csv_parse_warnings(tmp_path):
+    # A CSV row with a duplicate EAN gets dropped by CsvCatalogSource, and the
+    # reason must be surfaced back to the caller -- not silently discarded --
+    # so the user can learn why a row vanished from their upload.
+    store = ScanStore(tmp_path / "app.sqlite3")
+    cache = PriceCache(tmp_path / "app.sqlite3")
+    csv_bytes = (
+        "nazwa;cena;ean;kategoria\n"
+        "Produkt A;10,00;5901234123457;Elektronika\n"
+        "Produkt A dup;5,00;5901234123457;Elektronika\n"
+    ).encode("utf-8")
+
+    scan_id, warnings = create_scan(
+        csv_bytes=csv_bytes, tenant_id="t1", scope_type="full", sample_per_category=None,
+        sample_seed=1, market="PL", max_delivery_days=5, max_concurrency=5,
+        staleness_threshold_days=14, store=store, cache=cache, provider_name="perplexity",
+    )
+
+    assert len(warnings) == 1
+    assert "duplicate EAN" in warnings[0]
     store.close()
     cache.close()

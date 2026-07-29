@@ -1,3 +1,7 @@
 tests/fixtures/real_catalog.csv
 .env
 .env.local
+
+# Runtime DB (default path used by app/scans/api.py)
+data/
+*.sqlite3

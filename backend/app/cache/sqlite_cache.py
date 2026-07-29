@@ -31,6 +31,10 @@ class PriceCache:
         self._create_schema()
 
     def _create_schema(self) -> None:
+        # WAL reduces writer/reader contention now that the SSE endpoint polls
+        # the store directly on the event loop while run_scan's background
+        # task reads/writes the cache concurrently.
+        self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS price_cache (

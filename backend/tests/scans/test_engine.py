@@ -70,7 +70,7 @@ def _make_store_with_products(tmp_path, products, *, max_concurrency=5):
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=max_concurrency, staleness_threshold_days=14,
-        products=products, stale_external_ids=(), estimate=estimate,
+        products=products, stale_eans=(), estimate=estimate,
         overlapping_count=0, stale_count=0,
     )
     return store, scan_id

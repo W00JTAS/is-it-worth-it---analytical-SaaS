@@ -36,7 +36,7 @@ def test_create_scan_persists_scan_and_products(tmp_path):
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
-        products=products, stale_external_ids=(), estimate=estimate,
+        products=products, stale_eans=(), estimate=estimate,
         overlapping_count=0, stale_count=0,
     )
 
@@ -56,13 +56,16 @@ def test_create_scan_persists_scan_and_products(tmp_path):
 
 def test_stale_products_are_flagged_on_creation(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
-    products = [_make_product(external_id="1"), _make_product(external_id="2")]
+    products = [
+        _make_product(external_id="1", ean="5901234123457"),
+        _make_product(external_id="2", ean="5900000000107"),
+    ]
     estimate = estimate_cost(cache_misses=1, stale_count=1, max_concurrency=5)
 
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
-        products=products, stale_external_ids=("2",), estimate=estimate,
+        products=products, stale_eans=("5900000000107",), estimate=estimate,
         overlapping_count=1, stale_count=1,
     )
 
@@ -79,6 +82,33 @@ def test_stale_products_are_flagged_on_creation(tmp_path):
     store.close()
 
 
+def test_was_stale_is_keyed_by_ean_not_external_id(tmp_path):
+    # external_id (SKU, or a row-index fallback) is not guaranteed unique
+    # across a scan's products -- two products could share the same
+    # external_id while having different EANs. was_stale must be joined on
+    # EAN, not external_id, or the wrong product could get flagged stale (and
+    # force_refresh_stale=True could then invalidate more cache entries than
+    # the user's approved stale_count accounted for).
+    store = ScanStore(tmp_path / "app.sqlite3")
+    products = [
+        _make_product(external_id="dup", ean="5901234123457"),
+        _make_product(external_id="dup", ean="5900000000107"),
+    ]
+    estimate = estimate_cost(cache_misses=1, stale_count=1, max_concurrency=5)
+
+    scan_id = store.create_scan(
+        scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
+        max_concurrency=5, staleness_threshold_days=14,
+        products=products, stale_eans=("5900000000107",), estimate=estimate,
+        overlapping_count=1, stale_count=1,
+    )
+
+    pending = {p.product.ean: p for p in store.list_pending(scan_id)}
+    assert pending["5901234123457"].was_stale is False
+    assert pending["5900000000107"].was_stale is True
+    store.close()
+
+
 def test_get_scan_returns_none_for_unknown_id(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     assert store.get_scan("does-not-exist") is None
@@ -91,7 +121,7 @@ def test_start_scan_sets_status_running(tmp_path):
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
-        products=[_make_product()], stale_external_ids=(), estimate=estimate,
+        products=[_make_product()], stale_eans=(), estimate=estimate,
         overlapping_count=0, stale_count=0,
     )
 
@@ -107,7 +137,7 @@ def test_mark_done_updates_status_offer_and_progress_count(tmp_path):
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
-        products=[_make_product()], stale_external_ids=(), estimate=estimate,
+        products=[_make_product()], stale_eans=(), estimate=estimate,
         overlapping_count=0, stale_count=0,
     )
     record = store.list_pending(scan_id)[0]
@@ -120,32 +150,13 @@ def test_mark_done_updates_status_offer_and_progress_count(tmp_path):
     store.close()
 
 
-def test_mark_skipped_updates_status_and_progress_without_counting_as_pending(tmp_path):
-    store = ScanStore(tmp_path / "app.sqlite3")
-    estimate = estimate_cost(cache_misses=0, stale_count=1, max_concurrency=5)
-    scan_id = store.create_scan(
-        scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
-        max_concurrency=5, staleness_threshold_days=14,
-        products=[_make_product()], stale_external_ids=("1",), estimate=estimate,
-        overlapping_count=0, stale_count=0,
-    )
-    record = store.list_pending(scan_id)[0]
-    offer = _make_offer()
-
-    store.mark_skipped(record.id, offer)
-
-    assert store.list_pending(scan_id) == []
-    assert store.get_scan(scan_id).completed_products == 1
-    store.close()
-
-
 def test_finalize_scan_is_done_when_nothing_pending(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5)
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
-        products=[_make_product()], stale_external_ids=(), estimate=estimate,
+        products=[_make_product()], stale_eans=(), estimate=estimate,
         overlapping_count=0, stale_count=0,
     )
     store.mark_done(store.list_pending(scan_id)[0].id, _make_offer())
@@ -163,7 +174,7 @@ def test_finalize_scan_is_failed_when_products_still_pending(tmp_path):
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
         products=[_make_product(external_id="1"), _make_product(external_id="2")],
-        stale_external_ids=(), estimate=estimate,
+        stale_eans=(), estimate=estimate,
         overlapping_count=0, stale_count=0,
     )
     store.mark_done(store.list_pending(scan_id)[0].id, _make_offer())

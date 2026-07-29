@@ -16,6 +16,8 @@ from app.providers.perplexity import PerplexityProvider
 from app.scans.engine import run_scan
 from app.scans.orchestration import create_scan
 from app.scans.store import ScanStore
+from app.sources.column_mapping import ColumnMappingError
+from app.sources.csv_source import EmptyCsvError
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,22 @@ DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "app.
 _shared_store: ScanStore | None = None
 _shared_cache: PriceCache | None = None
 _shared_provider: PriceProvider | None = None
+
+# Scan ids with a `run_scan` background task currently in flight in THIS
+# process. Guards against a second `POST /scans/{id}/start` dispatching a
+# duplicate `run_scan` coroutine while the first is still running -- which
+# would double real provider calls and double effective concurrency against
+# the rate-limited API. Deliberately in-memory and per-process: a genuine
+# process restart starts with an empty set, which is correct, since
+# resumability is exactly "no worker is currently running, so start one".
+_scans_in_flight: set[str] = set()
+
+# Bounds how long GET /scans/{id}/events will poll a scan that is never
+# started: after this many ticks at SSE_POLL_INTERVAL_SECONDS with no
+# transition out of "estimated", the stream sends a final event and closes
+# instead of polling forever.
+SSE_MAX_ESTIMATED_TICKS = 100
+SSE_POLL_INTERVAL_SECONDS = 0.3
 
 
 def get_store() -> ScanStore:
@@ -104,21 +122,28 @@ async def _run_scan_and_guard(
     forever since `store.finalize_scan` is never reached. So: log it loudly,
     then finalize the scan directly so at least the status reflects reality
     (finalize_scan already lands on FAILED when products are still pending).
+
+    Also removes `scan_id` from `_scans_in_flight` in a `finally` block, so
+    the duplicate-dispatch guard is cleared whether the run succeeds, fails,
+    or this wrapper's own crash-recovery path runs.
     """
     try:
-        await run_scan(scan_id, store, cache, provider, market, max_delivery_days, max_concurrency)
-    except Exception:
-        logger.exception(
-            "run_scan crashed unexpectedly for scan_id=%s (genuine bug, not "
-            "ProviderUnavailable); marking scan as failed",
-            scan_id,
-        )
         try:
-            store.finalize_scan(scan_id)
+            await run_scan(scan_id, store, cache, provider, market, max_delivery_days, max_concurrency)
         except Exception:
             logger.exception(
-                "failed to finalize scan_id=%s after an earlier run_scan crash", scan_id
+                "run_scan crashed unexpectedly for scan_id=%s (genuine bug, not "
+                "ProviderUnavailable); marking scan as failed",
+                scan_id,
             )
+            try:
+                store.finalize_scan(scan_id)
+            except Exception:
+                logger.exception(
+                    "failed to finalize scan_id=%s after an earlier run_scan crash", scan_id
+                )
+    finally:
+        _scans_in_flight.discard(scan_id)
 
 
 @router.post("/scans")
@@ -139,17 +164,41 @@ async def post_scans(
             status_code=400,
             detail=f"scope_type must be one of {VALID_SCOPE_TYPES!r}, got {scope_type!r}",
         )
+    if max_concurrency < 1:
+        raise HTTPException(
+            status_code=400, detail=f"max_concurrency must be >= 1, got {max_concurrency!r}"
+        )
+    if max_delivery_days < 1:
+        raise HTTPException(
+            status_code=400, detail=f"max_delivery_days must be >= 1, got {max_delivery_days!r}"
+        )
+    if staleness_threshold_days < 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"staleness_threshold_days must be >= 0, got {staleness_threshold_days!r}",
+        )
+    if scope_type == "sample" and (sample_per_category is None or sample_per_category < 1):
+        raise HTTPException(
+            status_code=400,
+            detail="sample_per_category must be >= 1 when scope_type is 'sample'",
+        )
 
     csv_bytes = await file.read()
-    scan_id = create_scan(
-        csv_bytes=csv_bytes, tenant_id="default", scope_type=scope_type,
-        sample_per_category=sample_per_category, sample_seed=_sample_seed_from_csv(csv_bytes),
-        market=market, max_delivery_days=max_delivery_days, max_concurrency=max_concurrency,
-        staleness_threshold_days=staleness_threshold_days,
-        store=store, cache=cache, provider_name=provider.name,
-    )
+    try:
+        scan_id, warnings = create_scan(
+            csv_bytes=csv_bytes, tenant_id="default", scope_type=scope_type,
+            sample_per_category=sample_per_category, sample_seed=_sample_seed_from_csv(csv_bytes),
+            market=market, max_delivery_days=max_delivery_days, max_concurrency=max_concurrency,
+            staleness_threshold_days=staleness_threshold_days,
+            store=store, cache=cache, provider_name=provider.name,
+        )
+    except (EmptyCsvError, ColumnMappingError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     scan = store.get_scan(scan_id)
-    return _scan_to_dict(scan)
+    result = _scan_to_dict(scan)
+    result["warnings"] = warnings
+    return result
 
 
 class StartScanRequest(BaseModel):
@@ -168,6 +217,17 @@ async def start_scan(
     scan = store.get_scan(scan_id)
     if scan is None:
         raise HTTPException(status_code=404, detail="scan not found")
+
+    if scan_id in _scans_in_flight:
+        raise HTTPException(status_code=409, detail="scan already running")
+    _scans_in_flight.add(scan_id)
+
+    # Set the DB status synchronously, before dispatching the background
+    # task, not inside run_scan (which only executes after this response is
+    # sent). Otherwise there's a window where this response says "running"
+    # but the DB still says "estimated", and a crash in that window loses the
+    # fact that a start was requested.
+    store.start_scan(scan_id)
 
     if body.force_refresh_stale:
         for record in store.list_pending(scan_id):
@@ -196,11 +256,27 @@ async def stream_scan_events(scan_id: str, store: ScanStore = Depends(get_store)
         raise HTTPException(status_code=404, detail="scan not found")
 
     async def event_generator():
+        estimated_ticks = 0
         while True:
             scan = store.get_scan(scan_id)
             yield f"data: {json.dumps(_scan_to_dict(scan))}\n\n"
             if scan.status.value in ("done", "failed"):
                 break
-            await asyncio.sleep(0.3)
+            if scan.status.value == "estimated":
+                estimated_ticks += 1
+                if estimated_ticks >= SSE_MAX_ESTIMATED_TICKS:
+                    # Never started -- stop polling forever and tell the
+                    # client explicitly rather than leaving the connection
+                    # open indefinitely.
+                    yield (
+                        "data: "
+                        + json.dumps({"scan_id": scan_id, "status": "timeout",
+                                       "detail": "scan was never started"})
+                        + "\n\n"
+                    )
+                    break
+            else:
+                estimated_ticks = 0
+            await asyncio.sleep(SSE_POLL_INTERVAL_SECONDS)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

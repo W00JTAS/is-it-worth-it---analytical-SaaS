@@ -42,7 +42,6 @@ def test_scan_status_values():
 def test_product_status_values():
     assert ProductStatus.PENDING.value == "pending"
     assert ProductStatus.DONE.value == "done"
-    assert ProductStatus.SKIPPED.value == "skipped"
 
 
 def test_scan_holds_all_fields():
@@ -78,6 +77,8 @@ def test_scan_product_record_holds_all_fields():
 
 
 def test_staleness_report_holds_fields():
-    report = StalenessReport(overlapping_count=3, stale_external_ids=("1", "2"))
+    report = StalenessReport(
+        overlapping_count=3, stale_eans=("5901234123457", "5900000000107")
+    )
     assert report.overlapping_count == 3
-    assert report.stale_external_ids == ("1", "2")
+    assert report.stale_eans == ("5901234123457", "5900000000107")

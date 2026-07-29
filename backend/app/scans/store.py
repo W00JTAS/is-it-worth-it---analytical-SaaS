@@ -29,6 +29,10 @@ class ScanStore:
         self._create_schema()
 
     def _create_schema(self) -> None:
+        # WAL reduces writer/reader contention now that the SSE endpoint polls
+        # get_scan directly on the event loop while run_scan's background task
+        # writes concurrently.
+        self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS scans (
@@ -80,6 +84,9 @@ class ScanStore:
             )
             """
         )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_scan_products_scan_id ON scan_products(scan_id)"
+        )
         self._conn.commit()
 
     def create_scan(
@@ -92,13 +99,13 @@ class ScanStore:
         max_concurrency: int,
         staleness_threshold_days: int,
         products: list[Product],
-        stale_external_ids: tuple[str, ...],
+        stale_eans: tuple[str, ...],
         estimate: CostEstimate,
         overlapping_count: int,
         stale_count: int,
     ) -> str:
         scan_id = str(uuid.uuid4())
-        stale_set = set(stale_external_ids)
+        stale_set = set(stale_eans)
         with self._lock:
             self._conn.execute(
                 """
@@ -133,7 +140,12 @@ class ScanStore:
                         product.variant_id, product.name, product.ean,
                         str(product.wholesale_price), product.currency, product.category,
                         ProductStatus.PENDING.value,
-                        1 if product.external_id in stale_set else 0,
+                        # Keyed by EAN, not external_id: external_id (SKU, or a
+                        # row-index fallback) is not guaranteed unique across a
+                        # scan's products, so two products sharing an
+                        # external_id could otherwise be flagged stale
+                        # together even if only one's EAN was actually stale.
+                        1 if product.ean is not None and product.ean in stale_set else 0,
                     ),
                 )
             self._conn.commit()
@@ -266,9 +278,6 @@ class ScanStore:
 
     def mark_done(self, record_id: int, offer: OfferResult | None) -> None:
         self._mark(record_id, ProductStatus.DONE, offer)
-
-    def mark_skipped(self, record_id: int, offer: OfferResult | None) -> None:
-        self._mark(record_id, ProductStatus.SKIPPED, offer)
 
     def close(self) -> None:
         self._conn.close()

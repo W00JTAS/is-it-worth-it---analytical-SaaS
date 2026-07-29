@@ -19,7 +19,7 @@ def analyze_staleness(
     now = time.time()
 
     overlapping_count = 0
-    stale_external_ids: list[str] = []
+    stale_eans: list[str] = []
 
     for product in products:
         if not product.ean:
@@ -29,9 +29,9 @@ def analyze_staleness(
             continue
         overlapping_count += 1
         if now - entry.cached_at > threshold_seconds:
-            stale_external_ids.append(product.external_id)
+            stale_eans.append(product.ean)
 
     return StalenessReport(
         overlapping_count=overlapping_count,
-        stale_external_ids=tuple(stale_external_ids),
+        stale_eans=tuple(stale_eans),
     )
