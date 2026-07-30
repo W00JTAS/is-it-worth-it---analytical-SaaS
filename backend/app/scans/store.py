@@ -237,6 +237,20 @@ class ScanStore:
             ).fetchall()
         return [self._row_to_record(scan_id, row) for row in rows]
 
+    def list_all(self, scan_id: str) -> list[ScanProductRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT id, tenant_id, source, external_id, variant_id, name, ean,
+                       wholesale_price, currency, category, status, was_stale,
+                       offer_price, offer_currency, offer_seller, offer_source_url,
+                       offer_delivery_days, offer_confidence, offer_citations, offer_raw_response
+                FROM scan_products WHERE scan_id = ?
+                """,
+                (scan_id,),
+            ).fetchall()
+        return [self._row_to_record_with_offer(scan_id, row) for row in rows]
+
     def _row_to_record(self, scan_id: str, row: tuple) -> ScanProductRecord:
         (
             record_id, tenant_id, source, external_id, variant_id, name, ean,
@@ -250,6 +264,31 @@ class ScanStore:
         return ScanProductRecord(
             id=record_id, scan_id=scan_id, product=product,
             status=ProductStatus.PENDING, was_stale=bool(was_stale), offer=None,
+        )
+
+    def _row_to_record_with_offer(self, scan_id: str, row: tuple) -> ScanProductRecord:
+        (
+            record_id, tenant_id, source, external_id, variant_id, name, ean,
+            wholesale_price, currency, category, status, was_stale,
+            offer_price, offer_currency, offer_seller, offer_source_url,
+            offer_delivery_days, offer_confidence, offer_citations, offer_raw_response,
+        ) = row
+        product = Product(
+            tenant_id=tenant_id, source=source, external_id=external_id,
+            variant_id=variant_id, name=name, ean=ean,
+            wholesale_price=Decimal(wholesale_price), currency=currency, category=category,
+        )
+        offer = None
+        if offer_price is not None:
+            offer = OfferResult(
+                price=Decimal(offer_price), currency=offer_currency, seller=offer_seller,
+                source_url=offer_source_url, delivery_days=offer_delivery_days,
+                confidence=offer_confidence, citations=tuple(json.loads(offer_citations)),
+                raw_response=offer_raw_response,
+            )
+        return ScanProductRecord(
+            id=record_id, scan_id=scan_id, product=product,
+            status=ProductStatus(status), was_stale=bool(was_stale), offer=offer,
         )
 
     def _mark(self, record_id: int, status: ProductStatus, offer: OfferResult | None) -> None:

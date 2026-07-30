@@ -184,3 +184,49 @@ def test_finalize_scan_is_failed_when_products_still_pending(tmp_path):
 
     assert store.get_scan(scan_id).status == ScanStatus.FAILED
     store.close()
+
+
+def test_list_all_returns_both_pending_and_done_records_with_offer(tmp_path):
+    store = ScanStore(tmp_path / "app.sqlite3")
+    products = [_make_product(external_id="1"), _make_product(external_id="2")]
+    estimate = estimate_cost(cache_misses=2, stale_count=0, max_concurrency=5)
+    scan_id = store.create_scan(
+        scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
+        max_concurrency=5, staleness_threshold_days=14,
+        products=products, stale_eans=(), estimate=estimate,
+        overlapping_count=0, stale_count=0,
+    )
+    pending = store.list_pending(scan_id)
+    record_to_finish = next(r for r in pending if r.product.external_id == "1")
+    offer = _make_offer()
+    store.mark_done(record_to_finish.id, offer)
+
+    all_records = store.list_all(scan_id)
+
+    assert len(all_records) == 2
+    by_external_id = {r.product.external_id: r for r in all_records}
+    assert by_external_id["1"].status == ProductStatus.DONE
+    assert by_external_id["1"].offer == offer
+    assert by_external_id["2"].status == ProductStatus.PENDING
+    assert by_external_id["2"].offer is None
+    store.close()
+
+
+def test_list_all_reads_a_negative_result_offer_as_none(tmp_path):
+    store = ScanStore(tmp_path / "app.sqlite3")
+    products = [_make_product(external_id="1")]
+    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5)
+    scan_id = store.create_scan(
+        scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
+        max_concurrency=5, staleness_threshold_days=14,
+        products=products, stale_eans=(), estimate=estimate,
+        overlapping_count=0, stale_count=0,
+    )
+    record = store.list_pending(scan_id)[0]
+    store.mark_done(record.id, None)
+
+    all_records = store.list_all(scan_id)
+
+    assert all_records[0].status == ProductStatus.DONE
+    assert all_records[0].offer is None
+    store.close()
