@@ -1,12 +1,12 @@
 import { useState } from 'react'
+import { AppShell } from './AppShell'
 import { UploadStep } from './steps/UploadStep'
 import { MappingStep } from './steps/MappingStep'
 import { ScopeEstimateStep } from './steps/ScopeEstimateStep'
 import { ProgressStep } from './steps/ProgressStep'
 import { ReportStep } from './steps/ReportStep'
 import type { ColumnMapping } from './api/types'
-
-type WizardStep = 'upload' | 'mapping' | 'scope' | 'progress' | 'report'
+import type { WizardStep } from './wizardSteps'
 
 function App() {
   const [step, setStep] = useState<WizardStep>('upload')
@@ -15,7 +15,7 @@ function App() {
   const [scanId, setScanId] = useState<string | null>(null)
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <AppShell currentStep={step}>
       {step === 'upload' && (
         <UploadStep
           onFileSelected={(selected) => {
@@ -47,7 +47,7 @@ function App() {
         <ProgressStep scanId={scanId} onDone={() => setStep('report')} />
       )}
       {step === 'report' && scanId && <ReportStep scanId={scanId} />}
-    </div>
+    </AppShell>
   )
 }
 
