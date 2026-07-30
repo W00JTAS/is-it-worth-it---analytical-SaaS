@@ -488,3 +488,60 @@ def test_csv_preview_rejects_empty_csv_file(tmp_path):
     )
 
     assert response.status_code == 400
+
+
+def test_post_scans_honors_a_full_mapping_override(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    # Same trick as the /csv/preview override test: point wholesale_price at the ean
+    # column to prove the override actually reaches parsing, not just validation.
+    csv_bytes = (
+        "nazwa;cena;ean;kategoria\n"
+        "Produkt A;10,00;99,00;Elektronika\n"
+    ).encode("utf-8")
+
+    response = client.post(
+        "/scans",
+        files={"file": ("catalog.csv", io.BytesIO(csv_bytes), "text/csv")},
+        data={
+            "scope_type": "full",
+            "name_column": "nazwa", "wholesale_price_column": "ean",
+            "ean_column": "cena", "category_column": "kategoria",
+        },
+    )
+
+    assert response.status_code == 200
+    scan_id = response.json()["scan_id"]
+    pending = store.list_pending(scan_id)
+    assert len(pending) == 1
+    # wholesale_price_column was overridden to the "ean" column (value "99,00"),
+    # not the auto-detected "cena" column (value "10,00") -- proves the override won.
+    assert pending[0].product.wholesale_price == Decimal("99.00")
+
+
+def test_post_scans_rejects_partial_mapping_subset(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/scans",
+        files={"file": ("catalog.csv", io.BytesIO(CSV_BYTES), "text/csv")},
+        data={"scope_type": "full", "name_column": "nazwa"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_post_scans_still_works_with_no_mapping_fields(tmp_path):
+    # Backward compatibility: existing callers that never supply a mapping
+    # keep getting auto-detection, unchanged from before this task.
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/scans",
+        files={"file": ("catalog.csv", io.BytesIO(CSV_BYTES), "text/csv")},
+        data={"scope_type": "full"},
+    )
+
+    assert response.status_code == 200

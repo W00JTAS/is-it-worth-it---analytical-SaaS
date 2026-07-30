@@ -219,6 +219,11 @@ async def post_scans(
     max_delivery_days: int = Form(5),
     max_concurrency: int = Form(5),
     staleness_threshold_days: int = Form(14),
+    name_column: str | None = Form(None),
+    wholesale_price_column: str | None = Form(None),
+    ean_column: str | None = Form(None),
+    category_column: str | None = Form(None),
+    sku_column: str | None = Form(None),
     store: ScanStore = Depends(get_store),
     cache: PriceCache = Depends(get_cache),
     provider: PriceProvider = Depends(get_provider),
@@ -247,13 +252,17 @@ async def post_scans(
             detail="sample_per_category must be >= 1 when scope_type is 'sample'",
         )
 
+    column_mapping = _column_mapping_from_form(
+        name_column, wholesale_price_column, ean_column, category_column, sku_column,
+    )
+
     csv_bytes = await file.read()
     try:
         scan_id, warnings = create_scan(
             csv_bytes=csv_bytes, tenant_id="default", scope_type=scope_type,
             sample_per_category=sample_per_category, sample_seed=_sample_seed_from_csv(csv_bytes),
             market=market, max_delivery_days=max_delivery_days, max_concurrency=max_concurrency,
-            staleness_threshold_days=staleness_threshold_days,
+            staleness_threshold_days=staleness_threshold_days, column_mapping=column_mapping,
             store=store, cache=cache, provider_name=provider.name,
         )
     except (EmptyCsvError, ColumnMappingError) as exc:
