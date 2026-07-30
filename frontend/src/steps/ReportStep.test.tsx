@@ -113,3 +113,96 @@ describe('ReportStep', () => {
     expect(await screen.findByText('scan not found')).toBeInTheDocument()
   })
 })
+
+const PRODUCT_PAGE = {
+  total: 2,
+  page: 1,
+  page_size: 25,
+  rows: [
+    {
+      id: 1, external_id: 'p1', name: 'Zebra Gadget', category: 'Elektronika', ean: '123',
+      wholesale_price: '40.00', currency: 'PLN', computable: true,
+      exclusion_reason: null, anomaly_flag: null,
+      offer: {
+        price: '100.00', currency: 'PLN', seller: 'Shop', source_url: 'https://example.com/x',
+        delivery_days: 2, confidence: 0.9, citations: [],
+      },
+      margin_matrix: [
+        { scenario_pct: '-0.10', sale_price: '90.00', net_revenue: '73.17', total_costs: '64.80', margin: '8.37', margin_pct: '0.0930' },
+        { scenario_pct: '-0.05', sale_price: '95.00', net_revenue: '77.24', total_costs: '68.30', margin: '8.94', margin_pct: '0.0941' },
+        { scenario_pct: '0.00', sale_price: '100.00', net_revenue: '81.30', total_costs: '54.00', margin: '27.30', margin_pct: '0.2730' },
+        { scenario_pct: '0.05', sale_price: '105.00', net_revenue: '85.37', total_costs: '75.30', margin: '10.07', margin_pct: '0.0959' },
+      ],
+    },
+    {
+      id: 2, external_id: 'p2', name: 'Apple Widget', category: 'Elektronika', ean: null,
+      wholesale_price: '30.00', currency: 'PLN', computable: false,
+      exclusion_reason: 'no_offer', anomaly_flag: null,
+      offer: null, margin_matrix: null,
+    },
+  ],
+}
+
+describe('ReportStep product drill-down', () => {
+  it('loads and renders the product page after the summary loads', async () => {
+    vi.spyOn(client, 'getReportSummary').mockResolvedValue(SUMMARY)
+    const productsSpy = vi.spyOn(client, 'getReportProducts').mockResolvedValue(PRODUCT_PAGE)
+    render(<ReportStep scanId="scan-1" />)
+
+    await screen.findByText('Zebra Gadget')
+    expect(screen.getByText('Apple Widget')).toBeInTheDocument()
+    expect(productsSpy).toHaveBeenCalledWith(
+      'scan-1',
+      { commissionPct: '0.15', shippingCost: '0.00', vatPct: '0.23', returnsPct: '0.05' },
+      { category: undefined, status: undefined, sort: 'category', page: 1, pageSize: 25 },
+    )
+  })
+
+  it('expands a row to show offer details and the full margin matrix', async () => {
+    vi.spyOn(client, 'getReportSummary').mockResolvedValue(SUMMARY)
+    vi.spyOn(client, 'getReportProducts').mockResolvedValue(PRODUCT_PAGE)
+    render(<ReportStep scanId="scan-1" />)
+    await screen.findByText('Zebra Gadget')
+
+    await userEvent.click(screen.getByText('Zebra Gadget'))
+
+    expect(await screen.findByText('Shop')).toBeInTheDocument()
+    expect(screen.getByText('https://example.com/x')).toBeInTheDocument()
+  })
+
+  it('reloads page 1 when the status filter changes', async () => {
+    vi.spyOn(client, 'getReportSummary').mockResolvedValue(SUMMARY)
+    const productsSpy = vi.spyOn(client, 'getReportProducts').mockResolvedValue(PRODUCT_PAGE)
+    render(<ReportStep scanId="scan-1" />)
+    await screen.findByText('Zebra Gadget')
+
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'no_offer')
+
+    await waitFor(() =>
+      expect(productsSpy).toHaveBeenLastCalledWith(
+        'scan-1',
+        { commissionPct: '0.15', shippingCost: '0.00', vatPct: '0.23', returnsPct: '0.05' },
+        { category: undefined, status: 'no_offer', sort: 'category', page: 1, pageSize: 25 },
+      ),
+    )
+  })
+
+  it('requests the next page when Następna is clicked', async () => {
+    vi.spyOn(client, 'getReportSummary').mockResolvedValue(SUMMARY)
+    const productsSpy = vi.spyOn(client, 'getReportProducts').mockResolvedValue({
+      ...PRODUCT_PAGE, total: 30,
+    })
+    render(<ReportStep scanId="scan-1" />)
+    await screen.findByText('Zebra Gadget')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Następna' }))
+
+    await waitFor(() =>
+      expect(productsSpy).toHaveBeenLastCalledWith(
+        'scan-1',
+        { commissionPct: '0.15', shippingCost: '0.00', vatPct: '0.23', returnsPct: '0.05' },
+        { category: undefined, status: undefined, sort: 'category', page: 2, pageSize: 25 },
+      ),
+    )
+  })
+})

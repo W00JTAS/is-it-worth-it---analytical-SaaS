@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getReportSummary } from '../api/client'
+import { getReportProducts, getReportSummary } from '../api/client'
 import { ApiError } from '../api/types'
-import type { CostConfigInput, ReportSummary } from '../api/types'
+import type { CostConfigInput, ProductRow, ReportSummary, ProductPage } from '../api/types'
 
 const STORAGE_KEY = 'isItWorthIt.costConfig'
 
@@ -10,6 +10,25 @@ const DEFAULT_COST_CONFIG: CostConfigInput = {
   shippingCost: '0.00',
   vatPct: '0.23',
   returnsPct: '0.05',
+}
+
+const PAGE_SIZE = 25
+
+const STATUS_LABELS: Record<string, string> = {
+  computable: 'Policzone',
+  not_checked: 'Nie sprawdzono',
+  no_offer: 'Brak oferty',
+  currency_mismatch: 'Inna waluta',
+  anomaly: 'Oflagowane',
+}
+
+function statusLabel(row: ProductRow): string {
+  return STATUS_LABELS[row.computable ? 'computable' : row.exclusion_reason ?? 'no_offer']
+}
+
+function marginAtZero(row: ProductRow): string | null {
+  const match = row.margin_matrix?.find((m) => m.scenario_pct === '0.00')
+  return match ? match.margin_pct : null
 }
 
 function loadStoredCostConfig(): CostConfigInput {
@@ -33,6 +52,85 @@ export function formatPct(value: string | null): string {
   return `${(Number(value) * 100).toFixed(1)}%`
 }
 
+function ProductDetail({ row }: { row: ProductRow }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-slate-900/60 p-4 text-sm text-slate-300">
+      {row.offer ? (
+        <>
+          <p>
+            Sprzedawca: <span className="text-slate-100">{row.offer.seller}</span>
+          </p>
+          <p>
+            Źródło:{' '}
+            <a
+              href={row.offer.source_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-emerald-400 underline"
+            >
+              {row.offer.source_url}
+            </a>
+          </p>
+          <p>Czas dostawy: {row.offer.delivery_days} dni</p>
+          <p>Pewność: {(row.offer.confidence * 100).toFixed(0)}%</p>
+        </>
+      ) : (
+        <p>Brak znalezionej oferty.</p>
+      )}
+      {row.anomaly_flag && <p className="text-amber-400">Flaga: {row.anomaly_flag}</p>}
+      {row.margin_matrix && (
+        <table className="mt-2 w-full text-xs">
+          <thead>
+            <tr className="text-left text-slate-500">
+              <th className="font-normal">Scenariusz</th>
+              <th className="text-right font-normal">Marża %</th>
+              <th className="text-right font-normal">Cena sprzedaży</th>
+            </tr>
+          </thead>
+          <tbody>
+            {row.margin_matrix.map((m) => (
+              <tr key={m.scenario_pct}>
+                <td>{formatPct(m.scenario_pct)}</td>
+                <td className="text-right tabular-nums">{formatPct(m.margin_pct)}</td>
+                <td className="text-right tabular-nums">{m.sale_price}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+function ProductRowCard({
+  row, expanded, onToggle,
+}: {
+  row: ProductRow
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const margin = marginAtZero(row)
+  return (
+    <div className="rounded-xl border border-slate-800/60">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="grid w-full grid-cols-1 gap-1 p-4 text-left md:grid-cols-[1fr_140px_100px_140px] md:items-center md:gap-4"
+      >
+        <span className="text-sm font-medium text-slate-100">{row.name}</span>
+        <span className="text-xs text-slate-400 md:text-sm">{row.category}</span>
+        <span className="text-sm tabular-nums text-slate-300 md:text-right">{formatPct(margin)}</span>
+        <span className="text-xs text-slate-400 md:text-sm">{statusLabel(row)}</span>
+      </button>
+      {expanded && (
+        <div className="border-t border-slate-800/60 p-4">
+          <ProductDetail row={row} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface ReportStepProps {
   scanId: string
 }
@@ -42,6 +140,56 @@ export function ReportStep({ scanId }: ReportStepProps) {
   const [summary, setSummary] = useState<ReportSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [category, setCategory] = useState('')
+  const [status, setStatus] = useState('')
+  const [sort, setSort] = useState('category')
+  const [productPage, setProductPage] = useState<ProductPage | null>(null)
+  const [productsError, setProductsError] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+
+  async function loadProducts(overrides: { category?: string; status?: string; sort?: string; page: number }) {
+    setProductsError(null)
+    const effectiveCategory = overrides.category ?? category
+    const effectiveStatus = overrides.status ?? status
+    const effectiveSort = overrides.sort ?? sort
+    try {
+      const result = await getReportProducts(scanId, costConfig, {
+        category: effectiveCategory || undefined,
+        status: effectiveStatus || undefined,
+        sort: effectiveSort,
+        page: overrides.page,
+        pageSize: PAGE_SIZE,
+      })
+      setProductPage(result)
+    } catch (err) {
+      setProductsError(err instanceof ApiError ? err.message : 'Nie udało się wczytać produktów')
+    }
+  }
+
+  function handleCategoryChange(value: string) {
+    setCategory(value)
+    loadProducts({ category: value, page: 1 })
+  }
+
+  function handleStatusChange(value: string) {
+    setStatus(value)
+    loadProducts({ status: value, page: 1 })
+  }
+
+  function handleSortChange(value: string) {
+    setSort(value)
+    loadProducts({ sort: value, page: 1 })
+  }
+
+  function handlePrevPage() {
+    const current = productPage?.page ?? 1
+    loadProducts({ page: Math.max(1, current - 1) })
+  }
+
+  function handleNextPage() {
+    const current = productPage?.page ?? 1
+    loadProducts({ page: current + 1 })
+  }
 
   async function recalculate() {
     setError(null)
@@ -50,6 +198,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
       const result = await getReportSummary(scanId, costConfig)
       setSummary(result)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(costConfig))
+      await loadProducts({ page: 1 })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Nie udało się policzyć raportu')
     } finally {
@@ -225,6 +374,90 @@ export function ReportStep({ scanId }: ReportStepProps) {
               ))}
             </tbody>
           </table>
+        </section>
+      )}
+
+      {productPage && (
+        <section className="flex flex-col gap-4">
+          <h2 className="text-sm font-medium text-slate-400">Produkty</h2>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <label className="flex items-center gap-2 text-slate-300">
+              Kategoria
+              <select
+                value={category}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
+              >
+                <option value="">Wszystkie</option>
+                {Array.from(new Set(summary?.category_table.map((r) => r.category) ?? [])).map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-slate-300">
+              Status
+              <select
+                value={status}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
+              >
+                <option value="">Wszystkie</option>
+                <option value="computable">Policzone</option>
+                <option value="no_offer">Bez oferty</option>
+                <option value="anomaly">Oflagowane</option>
+                <option value="currency_mismatch">Inna waluta</option>
+                <option value="not_checked">Nie sprawdzono</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-slate-300">
+              Sortowanie
+              <select
+                value={sort}
+                onChange={(e) => handleSortChange(e.target.value)}
+                className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
+              >
+                <option value="category">Kategoria</option>
+                <option value="name">Nazwa</option>
+                <option value="margin_desc">Marża malejąco</option>
+                <option value="margin_asc">Marża rosnąco</option>
+              </select>
+            </label>
+          </div>
+
+          {productsError && <p className="text-sm text-red-400">{productsError}</p>}
+
+          <div className="flex flex-col gap-2">
+            {productPage.rows.map((row) => (
+              <ProductRowCard
+                key={row.id}
+                row={row}
+                expanded={expandedId === row.id}
+                onToggle={() => setExpandedId(expandedId === row.id ? null : row.id)}
+              />
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between text-sm text-slate-400">
+            <button
+              type="button"
+              onClick={handlePrevPage}
+              disabled={productPage.page <= 1}
+              className="rounded-md border border-slate-700 px-3 py-1.5 disabled:opacity-40"
+            >
+              Poprzednia
+            </button>
+            <span>
+              Strona {productPage.page} z {Math.max(1, Math.ceil(productPage.total / productPage.page_size))}
+            </span>
+            <button
+              type="button"
+              onClick={handleNextPage}
+              disabled={productPage.page * productPage.page_size >= productPage.total}
+              className="rounded-md border border-slate-700 px-3 py-1.5 disabled:opacity-40"
+            >
+              Następna
+            </button>
+          </div>
         </section>
       )}
     </div>
