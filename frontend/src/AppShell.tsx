@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Sidebar,
   SidebarContent,
@@ -27,12 +28,17 @@ interface AppShellProps {
 
 export function AppShell({ currentStep, children }: AppShellProps) {
   const { theme, toggleTheme } = useTheme()
+  const [open, setOpen] = useState(false)
   const currentIndex = WIZARD_STEPS.findIndex((step) => step.id === currentStep)
 
   return (
     <TooltipProvider>
-      <SidebarProvider>
-        <Sidebar collapsible="icon">
+      <SidebarProvider open={open} onOpenChange={setOpen}>
+        <Sidebar
+          collapsible="icon"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+        >
           <SidebarHeader>
             <span className="px-2 py-1 text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">IS IT WORTH IT</span>
           </SidebarHeader>
@@ -69,10 +75,12 @@ export function AppShell({ currentStep, children }: AppShellProps) {
           <SidebarRail />
         </Sidebar>
         <SidebarInset>
-          <header className="flex items-center gap-2 p-2 md:hidden">
-            <SidebarTrigger />
-          </header>
-          {children}
+          <ScrollArea className="h-svh">
+            <header className="flex items-center gap-2 p-2 md:hidden">
+              <SidebarTrigger />
+            </header>
+            {children}
+          </ScrollArea>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
