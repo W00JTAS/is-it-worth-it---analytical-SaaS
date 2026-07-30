@@ -122,7 +122,7 @@ def _column_mapping_from_form(
     sku_column: str | None,
 ) -> ColumnMapping | None:
     required = (name_column, wholesale_price_column, ean_column, category_column)
-    provided = [f for f in required if f is not None]
+    provided = [f for f in required if f]
     if not provided:
         return None
     if len(provided) != len(required):
@@ -136,6 +136,36 @@ def _column_mapping_from_form(
     return ColumnMapping(
         name=name_column, wholesale_price=wholesale_price_column,
         ean=ean_column, category=category_column, sku=sku_column,
+    )
+
+
+def _partial_column_mapping_from_form(
+    name_column: str | None,
+    wholesale_price_column: str | None,
+    ean_column: str | None,
+    category_column: str | None,
+    sku_column: str | None,
+) -> ColumnMapping | None:
+    """Permissive counterpart to `_column_mapping_from_form`, used only by
+    `POST /csv/preview`.
+
+    Unlike the strict helper, this accepts ANY subset of the 4 required
+    fields -- including zero, a partial subset, or all 4 -- and never raises.
+    A blank/falsy value for a given field is treated as "not provided" for
+    that field (matching the truthy-check fix applied to the strict helper
+    above), so it falls back to auto-detection via `build_csv_preview`'s
+    `_merge_mapping`. Only when ALL 5 arguments are falsy do we return
+    `None` outright, letting `build_csv_preview` auto-detect everything.
+    """
+    fields = (name_column, wholesale_price_column, ean_column, category_column, sku_column)
+    if not any(fields):
+        return None
+    return ColumnMapping(
+        name=name_column or None,
+        wholesale_price=wholesale_price_column or None,
+        ean=ean_column or None,
+        category=category_column or None,
+        sku=sku_column or None,
     )
 
 
@@ -199,12 +229,12 @@ async def post_csv_preview(
     category_column: str | None = Form(None),
     sku_column: str | None = Form(None),
 ):
-    mapping = _column_mapping_from_form(
+    mapping = _partial_column_mapping_from_form(
         name_column, wholesale_price_column, ean_column, category_column, sku_column,
     )
     csv_bytes = await file.read()
     try:
-        preview = build_csv_preview(csv_bytes, tenant_id="default", mapping_override=mapping)
+        preview = await asyncio.to_thread(build_csv_preview, csv_bytes, "default", mapping)
     except EmptyCsvError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _csv_preview_to_dict(preview)

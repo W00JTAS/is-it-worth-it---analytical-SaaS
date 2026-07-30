@@ -466,7 +466,19 @@ def test_csv_preview_honors_a_full_mapping_override(tmp_path):
     assert body["mapping"]["ean"] == "cena"
 
 
-def test_csv_preview_rejects_partial_mapping_subset(tmp_path):
+# --- Fix 4 (final whole-branch review): POST /csv/preview accepts a ------
+# --- partial subset of mapping fields instead of rejecting it with 400 ----
+
+
+def test_csv_preview_accepts_partial_mapping_subset(tmp_path):
+    # Per the fix, /csv/preview must accept a mapping with just ONE of the 4
+    # required fields provided -- the single most important interaction this
+    # screen exists for: filling in one field at a time and refreshing to see
+    # the effect before all 4 are done. The provided field ("name_column")
+    # should be echoed back verbatim; the other 3 required fields, left
+    # unset, fall back to auto-detection (all 3 are auto-detectable from
+    # CSV_BYTES's headers); sku, never provided or auto-detectable here,
+    # stays null.
     app, store, cache = _make_app(tmp_path)
     client = TestClient(app)
 
@@ -476,7 +488,12 @@ def test_csv_preview_rejects_partial_mapping_subset(tmp_path):
         data={"name_column": "nazwa"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mapping"] == {
+        "name": "nazwa", "wholesale_price": "cena", "ean": "ean", "category": "kategoria", "sku": None,
+    }
+    assert body["parsed_count"] == 1
 
 
 def test_csv_preview_rejects_empty_csv_file(tmp_path):
@@ -530,6 +547,38 @@ def test_post_scans_rejects_partial_mapping_subset(tmp_path):
     )
 
     assert response.status_code == 400
+
+
+# --- Fix 5 (final whole-branch review): blank-string mapping fields must --
+# --- be treated as "not provided", not as a value, by the all-or-none check
+
+
+def test_post_scans_with_all_blank_mapping_fields_falls_back_to_auto_detection(tmp_path):
+    # Before the fix, `_column_mapping_from_form` checked `f is not None`, so
+    # 4 empty strings counted as "all 4 provided" and were passed straight
+    # through as ColumnMapping(name="", ...), producing 0 parsed products and
+    # a "missing name, skipped" warning per row instead of either a 400 or
+    # normal auto-detection. After the fix (`if f` truthy check), blank
+    # strings count as "not provided" -- with all 4 blank, that's "none
+    # provided", which falls through to ordinary auto-detection, succeeding
+    # exactly like `test_post_scans_still_works_with_no_mapping_fields` below.
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/scans",
+        files={"file": ("catalog.csv", io.BytesIO(CSV_BYTES), "text/csv")},
+        data={
+            "scope_type": "full",
+            "name_column": "", "wholesale_price_column": "",
+            "ean_column": "", "category_column": "",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_products"] == 1
+    assert body["warnings"] == []
 
 
 def test_post_scans_still_works_with_no_mapping_fields(tmp_path):
