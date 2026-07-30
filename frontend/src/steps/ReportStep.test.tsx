@@ -66,11 +66,11 @@ describe('ReportStep', () => {
 
     await waitFor(() =>
       expect(spy).toHaveBeenLastCalledWith('scan-1', {
-        commissionPct: '0.20', shippingCost: '0.00', vatPct: '0.23', returnsPct: '0.05',
+        commissionPct: '0.2', shippingCost: '0.00', vatPct: '0.23', returnsPct: '0.05',
       }),
     )
     expect(JSON.parse(localStorage.getItem('isItWorthIt.costConfig')!)).toEqual({
-      commissionPct: '0.20', shippingCost: '0.00', vatPct: '0.23', returnsPct: '0.05',
+      commissionPct: '0.2', shippingCost: '0.00', vatPct: '0.23', returnsPct: '0.05',
     })
   })
 

@@ -12,26 +12,17 @@ const DEFAULT_COST_CONFIG: CostConfigInput = {
   returnsPct: '0.05',
 }
 
-function normalizeCostConfig(config: CostConfigInput): CostConfigInput {
-  return {
-    commissionPct: parseFloat(config.commissionPct).toFixed(2),
-    shippingCost: parseFloat(config.shippingCost).toFixed(2),
-    vatPct: parseFloat(config.vatPct).toFixed(2),
-    returnsPct: parseFloat(config.returnsPct).toFixed(2),
-  }
-}
-
 function loadStoredCostConfig(): CostConfigInput {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return DEFAULT_COST_CONFIG
     const parsed = JSON.parse(raw)
-    return normalizeCostConfig({
+    return {
       commissionPct: String(parsed.commissionPct ?? DEFAULT_COST_CONFIG.commissionPct),
       shippingCost: String(parsed.shippingCost ?? DEFAULT_COST_CONFIG.shippingCost),
       vatPct: String(parsed.vatPct ?? DEFAULT_COST_CONFIG.vatPct),
       returnsPct: String(parsed.returnsPct ?? DEFAULT_COST_CONFIG.returnsPct),
-    })
+    }
   } catch {
     return DEFAULT_COST_CONFIG
   }
@@ -56,10 +47,9 @@ export function ReportStep({ scanId }: ReportStepProps) {
     setError(null)
     setIsLoading(true)
     try {
-      const normalized = normalizeCostConfig(costConfig)
-      const result = await getReportSummary(scanId, normalized)
+      const result = await getReportSummary(scanId, costConfig)
       setSummary(result)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(costConfig))
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Nie udało się policzyć raportu')
     } finally {
