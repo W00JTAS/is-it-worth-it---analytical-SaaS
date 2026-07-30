@@ -2,6 +2,11 @@ import { useRef, useState } from 'react'
 import { createScan, startScan } from '../api/client'
 import { ApiError } from '../api/types'
 import type { ColumnMapping, CreateScanResult, ScopeType } from '../api/types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { PaginatedList } from '@/components/PaginatedList'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 interface ScopeEstimateStepProps {
   file: File
@@ -120,95 +125,88 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 p-8">
-      <h1 className="text-xl font-semibold text-slate-100">Zakres skanu</h1>
+      <h1 className="text-xl font-semibold text-foreground">Zakres skanu</h1>
 
-      <fieldset className="flex flex-col gap-2 text-sm text-slate-300">
-        <label className="flex items-center gap-2">
-          <input
-            type="radio"
-            name="scope"
-            checked={scopeType === 'full'}
-            onChange={() => handleScopeTypeChange('full')}
-            disabled={fieldsDisabled}
-          />
-          Pełny skan
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="radio"
-            name="scope"
-            checked={scopeType === 'sample'}
-            onChange={() => handleScopeTypeChange('sample')}
-            disabled={fieldsDisabled}
-          />
-          Próbka per kategoria
-        </label>
+      <fieldset className="flex flex-col gap-3 text-sm text-muted-foreground">
+        <RadioGroup
+          value={scopeType}
+          onValueChange={(value) => handleScopeTypeChange(value as ScopeType)}
+          disabled={fieldsDisabled}
+        >
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="full" id="scope-full" />
+            <Label htmlFor="scope-full">Pełny skan</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="sample" id="scope-sample" />
+            <Label htmlFor="scope-sample">Próbka per kategoria</Label>
+          </div>
+        </RadioGroup>
         {scopeType === 'sample' && (
-          <label className="flex flex-col gap-1 pl-6">
-            Liczba produktów per kategoria
-            <input
+          <div className="flex flex-col gap-1 pl-6">
+            <Label htmlFor="sample-per-category">Liczba produktów per kategoria</Label>
+            <Input
+              id="sample-per-category"
               type="number"
               min={1}
               value={samplePerCategory}
               onChange={(e) => handleSamplePerCategoryChange(e.target.value)}
               disabled={fieldsDisabled}
-              className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
+              className="w-24"
             />
-          </label>
+          </div>
         )}
       </fieldset>
 
-      <label className="flex flex-col gap-1 text-sm text-slate-300">
-        Limit czasu dostawy (dni)
-        <input
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="max-delivery-days">Limit czasu dostawy (dni)</Label>
+        <Input
+          id="max-delivery-days"
           type="number"
           min={1}
           value={maxDeliveryDays}
           onChange={(e) => handleMaxDeliveryDaysChange(Number(e.target.value))}
           disabled={fieldsDisabled}
-          className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
+          className="w-24"
         />
-      </label>
+      </div>
 
-      <label className="flex flex-col gap-1 text-sm text-slate-300">
-        Limit współbieżności
-        <input
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="max-concurrency">Limit współbieżności</Label>
+        <Input
+          id="max-concurrency"
           type="number"
           min={1}
           value={maxConcurrency}
           onChange={(e) => handleMaxConcurrencyChange(Number(e.target.value))}
           disabled={fieldsDisabled}
-          className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
+          className="w-24"
         />
-      </label>
+      </div>
 
-      <label className="flex flex-col gap-1 text-sm text-slate-300">
-        Próg nieświeżości (dni)
-        <input
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="staleness-threshold">Próg nieświeżości (dni)</Label>
+        <Input
+          id="staleness-threshold"
           type="number"
           min={0}
           value={stalenessThresholdDays}
           onChange={(e) => handleStalenessThresholdChange(Number(e.target.value))}
           disabled={fieldsDisabled}
-          className="w-24 rounded border border-slate-700 bg-slate-900 p-1 text-slate-100"
+          className="w-24"
         />
-      </label>
+      </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {!result && (
-        <button
-          type="button"
-          onClick={handleEstimate}
-          disabled={isEstimating}
-          className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-slate-950 disabled:bg-slate-700 disabled:text-slate-400"
-        >
+        <Button type="button" onClick={handleEstimate} disabled={isEstimating} className="self-start">
           Oszacuj koszt
-        </button>
+        </Button>
       )}
 
       {result && (
-        <div className="flex flex-col gap-3 rounded-md border border-slate-700 p-4 text-sm text-slate-200">
+        <div className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm text-foreground">
           <p>
             Bez odświeżania:{' '}
             <span className="font-semibold">
@@ -234,26 +232,22 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
                 checked={forceRefreshStale}
                 onChange={(e) => setForceRefreshStale(e.target.checked)}
                 disabled={fieldsDisabled}
+                className="accent-primary"
               />
               Odśwież nieświeże ({result.stale_count} {pluralizeProdukt(result.stale_count)} z nich nie
               sprawdzano od dawna)
             </label>
           )}
           {result.warnings.length > 0 && (
-            <ul className="list-inside list-disc text-amber-400">
-              {result.warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
+            <PaginatedList
+              items={result.warnings}
+              pageSize={10}
+              renderItem={(warning) => <span className="text-warning">{warning}</span>}
+            />
           )}
-          <button
-            type="button"
-            onClick={handleStart}
-            disabled={isStarting}
-            className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-slate-950 disabled:bg-slate-700 disabled:text-slate-400"
-          >
+          <Button type="button" onClick={handleStart} disabled={isStarting} className="self-start">
             Uruchom skan
-          </button>
+          </Button>
         </div>
       )}
     </div>
