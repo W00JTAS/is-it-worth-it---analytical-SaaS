@@ -1,4 +1,6 @@
 import { useScanEvents } from '../api/useScanEvents'
+import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 
 interface ProgressStepProps {
   scanId: string
@@ -11,7 +13,7 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
   if (error) {
     return (
       <div className="mx-auto max-w-md p-8">
-        <p className="text-sm text-red-400">{error}</p>
+        <p className="text-sm text-destructive">{error}</p>
       </div>
     )
   }
@@ -19,7 +21,7 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
   if (!scan) {
     return (
       <div className="mx-auto max-w-md p-8">
-        <p className="text-sm text-slate-400">Łączenie ze skanem…</p>
+        <p className="text-sm text-muted-foreground">Łączenie ze skanem…</p>
       </div>
     )
   }
@@ -31,18 +33,13 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 p-8">
-      <h1 className="text-xl font-semibold text-slate-100">Przebieg skanu</h1>
-      <div className="h-3 w-full rounded-full bg-slate-800">
-        <div
-          className="h-3 rounded-full bg-emerald-500 transition-all"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-      <p className="text-sm text-slate-300">
+      <h1 className="text-xl font-semibold text-foreground">Przebieg skanu</h1>
+      <Progress value={percent} />
+      <p className="text-sm text-muted-foreground">
         {scan.completed_products} / {scan.total_products}
       </p>
       {source === 'polling' && (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Połączenie na żywo zerwane — aktualizacja co kilka sekund.
         </p>
       )}
@@ -50,18 +47,14 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
         <>
           <p
             className={`text-sm font-medium ${
-              scan.status === 'failed' ? 'text-red-400' : 'text-emerald-400'
+              scan.status === 'failed' ? 'text-destructive' : 'text-success'
             }`}
           >
             {scan.status === 'done' ? 'Skan zakończony.' : 'Skan zakończony z błędami.'}
           </p>
-          <button
-            type="button"
-            onClick={() => onDone(scanId)}
-            className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-slate-950"
-          >
+          <Button type="button" onClick={() => onDone(scanId)}>
             Zobacz raport
-          </button>
+          </Button>
         </>
       )}
     </div>

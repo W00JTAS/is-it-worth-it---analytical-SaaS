@@ -71,8 +71,8 @@ describe('ProgressStep', () => {
 
     const failedMessage = screen.getByText(/skan zakończony z błędami/i)
     expect(failedMessage).toBeInTheDocument()
-    expect(failedMessage.className).toContain('text-red-400')
-    expect(failedMessage.className).not.toContain('text-emerald-400')
+    expect(failedMessage.className).toContain('text-destructive')
+    expect(failedMessage.className).not.toContain('text-success')
   })
 
   it('shows a polling indicator when the source falls back to polling', () => {
