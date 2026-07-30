@@ -1,6 +1,11 @@
 import pytest
 
-from app.sources.column_mapping import ColumnMapping, ColumnMappingError, detect_column_mapping
+from app.sources.column_mapping import (
+    ColumnMapping,
+    ColumnMappingError,
+    detect_column_mapping,
+    detect_column_mapping_partial,
+)
 
 
 def test_detects_polish_headers():
@@ -40,3 +45,25 @@ def test_prefers_more_specific_alias_when_multiple_columns_match():
     # confirm it's seed-independent).
     mapping = detect_column_mapping(["Nazwa", "Cena", "Cena hurtowa", "EAN", "Kategoria"])
     assert mapping.wholesale_price == "Cena hurtowa"
+
+
+def test_partial_detection_returns_none_for_missing_required_fields():
+    mapping = detect_column_mapping_partial(["Nazwa", "Kategoria"])
+    assert mapping == ColumnMapping(name="Nazwa", wholesale_price=None, ean=None, category="Kategoria")
+
+
+def test_partial_detection_never_raises_when_nothing_matches():
+    mapping = detect_column_mapping_partial(["Foo", "Bar"])
+    assert mapping == ColumnMapping(name=None, wholesale_price=None, ean=None, category=None)
+
+
+def test_partial_detection_matches_everything_when_fully_detectable():
+    mapping = detect_column_mapping_partial(["Nazwa", "Cena hurtowa", "EAN", "Kategoria"])
+    assert mapping == ColumnMapping(
+        name="Nazwa", wholesale_price="Cena hurtowa", ean="EAN", category="Kategoria"
+    )
+
+
+def test_partial_detection_detects_sku_the_same_way_as_full_detection():
+    mapping = detect_column_mapping_partial(["SKU", "ean", "nazwa", "kategoria", "cena"])
+    assert mapping.sku == "SKU"

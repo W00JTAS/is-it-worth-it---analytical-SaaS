@@ -23,10 +23,10 @@ class ColumnMappingError(Exception):
 
 @dataclass(frozen=True)
 class ColumnMapping:
-    name: str
-    wholesale_price: str
-    ean: str
-    category: str
+    name: str | None
+    wholesale_price: str | None
+    ean: str | None
+    category: str | None
     sku: str | None = None
 
 
@@ -50,5 +50,26 @@ def detect_column_mapping(header: list[str]) -> ColumnMapping:
         wholesale_price=find(PRICE_ALIASES, "wholesale_price"),
         ean=find(EAN_ALIASES, "ean"),
         category=find(CATEGORY_ALIASES, "category"),
+        sku=find_optional(SKU_ALIASES),
+    )
+
+
+def detect_column_mapping_partial(header: list[str]) -> ColumnMapping:
+    """Like detect_column_mapping, but never raises — an unresolved required
+    field becomes None instead of raising ColumnMappingError, so the caller
+    can surface it as "pick manually" instead of failing outright."""
+    normalized = {h.strip().lower(): h for h in header}
+
+    def find_optional(aliases: tuple[str, ...]) -> str | None:
+        for alias in aliases:
+            if alias in normalized:
+                return normalized[alias]
+        return None
+
+    return ColumnMapping(
+        name=find_optional(NAME_ALIASES),
+        wholesale_price=find_optional(PRICE_ALIASES),
+        ean=find_optional(EAN_ALIASES),
+        category=find_optional(CATEGORY_ALIASES),
         sku=find_optional(SKU_ALIASES),
     )
