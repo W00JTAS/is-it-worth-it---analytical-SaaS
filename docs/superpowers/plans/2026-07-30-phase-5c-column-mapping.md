@@ -1390,7 +1390,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npm test`
-Expected: PASS (7 tests)
+Expected: PASS (6 tests)
 
 - [ ] **Step 5: Run the linter**
 
