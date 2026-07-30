@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { UploadStep } from './steps/UploadStep'
 import { ScopeEstimateStep } from './steps/ScopeEstimateStep'
 import { ProgressStep } from './steps/ProgressStep'
+import { ReportStep } from './steps/ReportStep'
 
-type WizardStep = 'upload' | 'scope' | 'progress'
+type WizardStep = 'upload' | 'scope' | 'progress' | 'report'
 
 function App() {
   const [step, setStep] = useState<WizardStep>('upload')
@@ -29,7 +30,10 @@ function App() {
           }}
         />
       )}
-      {step === 'progress' && scanId && <ProgressStep scanId={scanId} />}
+      {step === 'progress' && scanId && (
+        <ProgressStep scanId={scanId} onDone={() => setStep('report')} />
+      )}
+      {step === 'report' && scanId && <ReportStep scanId={scanId} />}
     </div>
   )
 }

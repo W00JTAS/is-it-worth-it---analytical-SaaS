@@ -2,9 +2,10 @@ import { useScanEvents } from '../api/useScanEvents'
 
 interface ProgressStepProps {
   scanId: string
+  onDone: (scanId: string) => void
 }
 
-export function ProgressStep({ scanId }: ProgressStepProps) {
+export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
   const { scan, source, error } = useScanEvents(scanId)
 
   if (error) {
@@ -46,13 +47,22 @@ export function ProgressStep({ scanId }: ProgressStepProps) {
         </p>
       )}
       {isTerminal && (
-        <p
-          className={`text-sm font-medium ${
-            scan.status === 'failed' ? 'text-red-400' : 'text-emerald-400'
-          }`}
-        >
-          {scan.status === 'done' ? 'Skan zakończony.' : 'Skan zakończony z błędami.'}
-        </p>
+        <>
+          <p
+            className={`text-sm font-medium ${
+              scan.status === 'failed' ? 'text-red-400' : 'text-emerald-400'
+            }`}
+          >
+            {scan.status === 'done' ? 'Skan zakończony.' : 'Skan zakończony z błędami.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => onDone(scanId)}
+            className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-slate-950"
+          >
+            Zobacz raport
+          </button>
+        </>
       )}
     </div>
   )
