@@ -22,7 +22,7 @@ const EMPTY_MAPPING: ColumnMapping = {
 }
 
 const SELECT_CLASS =
-  'h-9 w-56 rounded-md border border-input bg-transparent px-3 py-1 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30'
+  'h-8 w-56 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80'
 
 interface MappingStepProps {
   file: File
@@ -34,6 +34,12 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
   const [mapping, setMapping] = useState<ColumnMapping>(EMPTY_MAPPING)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  // Guards against a stale loadPreview response overwriting a newer one --
+  // e.g. the user edits a dropdown while a previously-triggered "Odśwież
+  // podgląd" request is still in flight. The dropdowns are also disabled
+  // while `isLoading` (primary fix, see the `disabled={isLoading}` selects
+  // below); this counter is defense in depth in case that disabling is ever
+  // bypassed or removed. Mirrors ScopeEstimateStep's estimateRequestIdRef.
   const previewRequestIdRef = useRef(0)
 
   const loadPreview = useCallback(async (override?: ColumnMapping) => {
@@ -44,6 +50,14 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
       const result = await getCsvPreview(file, override)
       if (previewRequestIdRef.current === requestId) {
         setPreview(result)
+        // Only adopt the backend's `mapping` on the INITIAL load (no
+        // override -- pure auto-detection, nothing local to preserve yet).
+        // On a user-initiated refresh (override provided), the local
+        // `mapping` state IS the current source of truth for what the user
+        // has chosen -- adopting the response here would silently revert an
+        // explicitly-cleared field (e.g. SKU) back to its auto-detected
+        // value, since the backend's `or`-based merge can't distinguish
+        // "not sent" from "explicitly cleared to null".
         if (override === undefined) {
           setMapping(result.mapping)
         }
@@ -59,6 +73,9 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
     }
   }, [file])
 
+  // Runs once, on mount, for pure auto-detection. Every later refresh is the
+  // explicit "Odśwież podgląd" button below -- never triggered by editing a
+  // dropdown, matching the explicit-recompute pattern used throughout this wizard.
   useEffect(() => {
     loadPreview()
   }, [loadPreview])
@@ -84,7 +101,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
       {preview && (
         <>
           <section className="flex flex-col gap-4">
-            <div className="divide-y divide-border rounded-2xl border border-border bg-card">
+            <div className="divide-y divide-border rounded-lg border border-border bg-card">
               <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
                 Nazwa
                 <select
@@ -166,14 +183,18 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
               {preview.parsed_count} / {preview.total_rows} wierszy sparsowanych poprawnie
             </p>
             {preview.warnings.length > 0 && (
-              <PaginatedList
-                items={preview.warnings}
-                pageSize={10}
-                renderItem={(warning) => <span className="text-warning">{warning}</span>}
-              />
-            )}
-            {preview.warning_count > preview.warnings.length && (
-              <p>...i {preview.warning_count - preview.warnings.length} więcej</p>
+              <>
+                <PaginatedList
+                  items={preview.warnings}
+                  pageSize={10}
+                  renderItem={(warning) => <span className="text-warning">{warning}</span>}
+                />
+                {preview.warning_count > preview.warnings.length && (
+                  <p className="text-sm text-warning">
+                    ...i {preview.warning_count - preview.warnings.length} więcej
+                  </p>
+                )}
+              </>
             )}
           </section>
 
