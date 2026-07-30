@@ -18,12 +18,15 @@ export function PaginatedList<T>({ items, pageSize, renderItem, emptyState }: Pa
   const [page, setPage] = useState(1)
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
 
+  // Resets to page 1 whenever `items` changes identity — callers must pass a referentially
+  // stable array (e.g. from useState), not an inline-derived one like items.filter(...),
+  // or the page will reset on every render.
   useEffect(() => {
     setPage(1)
   }, [items])
 
   if (items.length === 0) {
-    return emptyState ?? null
+    return emptyState ? <div className="space-y-3">{emptyState}</div> : null
   }
 
   const safePage = Math.min(page, pageCount)
