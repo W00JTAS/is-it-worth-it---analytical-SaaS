@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 
+from app.reports.api import router as reports_router
 from app.scans.api import router as scans_router
 
 app = FastAPI(title="IS_IT_WORTH_IT")
 app.include_router(scans_router)
+app.include_router(reports_router)
 
 
 @app.get("/health")
