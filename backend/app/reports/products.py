@@ -39,15 +39,21 @@ def _reference_margin_pct(evaluation: ProductEvaluation) -> Decimal | None:
 
 
 def _sort_key(sort: str):
+    # Every mode appends e.record.id as the final tiebreaker. Ties on the
+    # primary key(s) are common (identical margin from identical wholesale/
+    # offer prices, identical product names) and each page is an independent
+    # re-fetch-and-re-sort, so without a unique, stable tiebreaker a tied row
+    # can land on a different page — or on both, or on neither — between
+    # consecutive page requests.
     if sort == "name":
-        return lambda e: e.record.product.name
+        return lambda e: (e.record.product.name, e.record.id)
     if sort == "margin_asc":
         margin = _reference_margin_pct
-        return lambda e: (margin(e) is None, margin(e) or Decimal("0"))
+        return lambda e: (margin(e) is None, margin(e) or Decimal("0"), e.record.id)
     if sort == "margin_desc":
         margin = _reference_margin_pct
-        return lambda e: (margin(e) is None, -(margin(e) or Decimal("0")))
-    return lambda e: (e.record.product.category, e.record.product.name)
+        return lambda e: (margin(e) is None, -(margin(e) or Decimal("0")), e.record.id)
+    return lambda e: (e.record.product.category, e.record.product.name, e.record.id)
 
 
 def list_product_rows(

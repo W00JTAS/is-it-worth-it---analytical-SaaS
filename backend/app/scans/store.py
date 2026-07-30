@@ -238,14 +238,22 @@ class ScanStore:
         return [self._row_to_record(scan_id, row) for row in rows]
 
     def list_all(self, scan_id: str) -> list[ScanProductRecord]:
+        # offer_raw_response deliberately excluded: list_all is only ever
+        # consumed by app/reports/*, which never reads/serializes it (see
+        # api.py's _evaluation_to_dict). At realistic catalog scale (~115k
+        # rows) selecting and json.loads-ing it for every row on every report
+        # request needlessly materializes the full raw provider payload
+        # (~230MB additional RSS measured). _row_to_record_with_offer fills
+        # in an empty placeholder for it below.
         with self._lock:
             rows = self._conn.execute(
                 """
                 SELECT id, tenant_id, source, external_id, variant_id, name, ean,
                        wholesale_price, currency, category, status, was_stale,
                        offer_price, offer_currency, offer_seller, offer_source_url,
-                       offer_delivery_days, offer_confidence, offer_citations, offer_raw_response
+                       offer_delivery_days, offer_confidence, offer_citations
                 FROM scan_products WHERE scan_id = ?
+                ORDER BY id
                 """,
                 (scan_id,),
             ).fetchall()
@@ -271,7 +279,7 @@ class ScanStore:
             record_id, tenant_id, source, external_id, variant_id, name, ean,
             wholesale_price, currency, category, status, was_stale,
             offer_price, offer_currency, offer_seller, offer_source_url,
-            offer_delivery_days, offer_confidence, offer_citations, offer_raw_response,
+            offer_delivery_days, offer_confidence, offer_citations,
         ) = row
         product = Product(
             tenant_id=tenant_id, source=source, external_id=external_id,
@@ -284,7 +292,8 @@ class ScanStore:
                 price=Decimal(offer_price), currency=offer_currency, seller=offer_seller,
                 source_url=offer_source_url, delivery_days=offer_delivery_days,
                 confidence=offer_confidence, citations=tuple(json.loads(offer_citations)),
-                raw_response=offer_raw_response,
+                # Not selected by list_all's query — see the comment there.
+                raw_response="",
             )
         return ScanProductRecord(
             id=record_id, scan_id=scan_id, product=product,

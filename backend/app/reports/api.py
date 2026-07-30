@@ -139,7 +139,7 @@ def _product_page_to_dict(page: ProductPage) -> dict:
 
 
 @router.get("/scans/{scan_id}/report/summary")
-async def get_report_summary(
+def get_report_summary(
     scan_id: str,
     commission_pct: str = Query(...),
     shipping_cost: str = Query(...),
@@ -155,7 +155,7 @@ async def get_report_summary(
 
 
 @router.get("/scans/{scan_id}/report/products")
-async def get_report_products(
+def get_report_products(
     scan_id: str,
     commission_pct: str = Query(...),
     shipping_cost: str = Query(...),

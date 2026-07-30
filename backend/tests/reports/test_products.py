@@ -111,3 +111,29 @@ def test_sorts_by_margin_desc_and_puts_non_computable_rows_last():
     page = list_product_rows(records, COST_CONFIG, sort="margin_desc")
 
     assert [row.record.product.external_id for row in page.rows] == ["2", "1", "3"]
+
+
+def test_margin_desc_breaks_ties_deterministically_by_ascending_id():
+    # Same wholesale/offer price on all three -> identical margin_pct. Listed
+    # out of id order to prove the tiebreaker isn't just accidental input order.
+    records = [
+        _make_record(3, offer=_make_offer(price=Decimal("100.00")), wholesale_price=Decimal("40.00")),
+        _make_record(1, offer=_make_offer(price=Decimal("100.00")), wholesale_price=Decimal("40.00")),
+        _make_record(2, offer=_make_offer(price=Decimal("100.00")), wholesale_price=Decimal("40.00")),
+    ]
+
+    page = list_product_rows(records, COST_CONFIG, sort="margin_desc")
+
+    assert [row.record.id for row in page.rows] == [1, 2, 3]
+
+
+def test_name_sort_breaks_ties_deterministically_by_ascending_id():
+    records = [
+        _make_record(3, offer=_make_offer(), name="Same Name"),
+        _make_record(1, offer=_make_offer(), name="Same Name"),
+        _make_record(2, offer=_make_offer(), name="Same Name"),
+    ]
+
+    page = list_product_rows(records, COST_CONFIG, sort="name")
+
+    assert [row.record.id for row in page.rows] == [1, 2, 3]

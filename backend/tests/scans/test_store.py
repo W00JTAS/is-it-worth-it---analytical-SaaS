@@ -1,3 +1,4 @@
+from dataclasses import replace
 from decimal import Decimal
 
 from app.models.product import Product
@@ -206,7 +207,12 @@ def test_list_all_returns_both_pending_and_done_records_with_offer(tmp_path):
     assert len(all_records) == 2
     by_external_id = {r.product.external_id: r for r in all_records}
     assert by_external_id["1"].status == ProductStatus.DONE
-    assert by_external_id["1"].offer == offer
+    # list_all deliberately omits offer_raw_response from its SELECT (it's
+    # never read by app/reports/*, and materializing it for every row is
+    # expensive at scale — see the comment on list_all). So the offer read
+    # back here matches the original in every field except raw_response,
+    # which comes back as "" instead of the persisted "{}".
+    assert by_external_id["1"].offer == replace(offer, raw_response="")
     assert by_external_id["2"].status == ProductStatus.PENDING
     assert by_external_id["2"].offer is None
     store.close()
