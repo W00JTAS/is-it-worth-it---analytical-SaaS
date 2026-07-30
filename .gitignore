@@ -1,4 +1,5 @@
 .claude/handoffs/
 .worktrees/
+.superpowers/
 .env
 .env.local
