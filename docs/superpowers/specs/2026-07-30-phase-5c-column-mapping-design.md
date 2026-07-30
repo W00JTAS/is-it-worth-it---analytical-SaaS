@@ -96,14 +96,20 @@ POST /csv/preview
 400 only on `EmptyCsvError` (no header row at all — nothing to preview). Column-detection gaps are
 never an error here, per the Decisions table above.
 
-`POST /scans` gains the same 5 optional form fields (`Form(None)`, all strings). When any are
-supplied, they're assembled into a `ColumnMapping` and passed to `create_scan` (new optional
-`column_mapping: ColumnMapping | None` parameter, threaded straight into `CsvCatalogSource(...,
-column_mapping=...)` in `orchestration.py`). When none are supplied, behavior is unchanged —
-`CsvCatalogSource` auto-detects via the existing, raising `detect_column_mapping`, preserving
-backward compatibility with every existing `POST /scans` test and caller. In practice the frontend
-will always supply all 4 required fields, since `MappingStep` blocks "Dalej" until they're filled —
-this fallback path exists for direct API/test callers only.
+`POST /scans` gains the same 5 optional form fields (`Form(None)`, all strings). Validation rule:
+either **all four** of `name_column`/`wholesale_price_column`/`ean_column`/`category_column` are
+supplied together, or **none** of them are — a partial subset is rejected with 400 ("provide all of
+name_column/wholesale_price_column/ean_column/category_column, or none"). This matters because
+`CsvCatalogSource` would otherwise silently look up a nonexistent dict key for any field left as
+`None` in a real `ColumnMapping`, producing empty names/prices for every row instead of an error.
+`sku_column` may be supplied independently of that group (it's optional in `ColumnMapping` either
+way). When the four are supplied, they're assembled into a complete `ColumnMapping` and passed to
+`create_scan` (new optional `column_mapping: ColumnMapping | None` parameter, threaded straight into
+`CsvCatalogSource(..., column_mapping=...)` in `orchestration.py`). When none are supplied, behavior
+is unchanged — `CsvCatalogSource` auto-detects via the existing, raising `detect_column_mapping`,
+preserving backward compatibility with every existing `POST /scans` test and caller. In practice the
+frontend will always supply all 4 required fields, since `MappingStep` blocks "Dalej" until they're
+filled — the "none supplied" fallback path exists for direct API/test callers only.
 
 ## Frontend
 
@@ -160,7 +166,8 @@ existing test cases, but asserting `None` instead of a raised exception for gaps
 `build_csv_preview` covering full-auto-detection, partial-override, and unresolvable-field cases;
 API tests for `POST /csv/preview` (200 with full mapping, 200 with partial/null mapping, 400 on
 empty CSV) and `POST /scans` with an explicit mapping override (confirming it actually changes which
-column is parsed as what, not just that the request succeeds). Frontend: component tests for
+column is parsed as what, not just that the request succeeds) plus the 400 case for a partial subset
+of the four required mapping fields. Frontend: component tests for
 `MappingStep` covering initial auto-detected state, dropdown changes + "Odśwież podgląd" triggering
 a new `getCsvPreview` call with the right fields, "Dalej" disabled/enabled logic, and the warning-list
 truncation display.
