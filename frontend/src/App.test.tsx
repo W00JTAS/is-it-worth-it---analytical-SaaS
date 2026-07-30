@@ -58,6 +58,7 @@ describe('App (ScanWizard)', () => {
 
     await screen.findByRole('heading', { name: 'Przebieg skanu' })
     expect(screen.getByText('2 / 5')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Postęp' })).toHaveAttribute('data-active', 'true')
   })
 
   it('shows a button to view the report once the scan is done, and navigates to ReportStep', async () => {

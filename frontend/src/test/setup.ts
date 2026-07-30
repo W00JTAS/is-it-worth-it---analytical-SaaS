@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { beforeEach, vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
 
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -16,4 +16,11 @@ beforeEach(() => {
       dispatchEvent: vi.fn(),
     })),
   })
+})
+
+// RTL's cleanup() unmounts components but never touches document.documentElement or
+// localStorage — reset both globally so test order and cross-file state can't matter.
+afterEach(() => {
+  document.documentElement.classList.remove('dark')
+  window.localStorage.clear()
 })

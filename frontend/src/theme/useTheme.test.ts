@@ -1,12 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { useTheme } from './useTheme'
-
-// RTL's cleanup() unmounts components but never touches document.documentElement —
-// without this, a `dark` class set by one test leaks into the next.
-afterEach(() => {
-  document.documentElement.classList.remove('dark')
-})
 
 function mockMatchMedia(matches: boolean) {
   Object.defineProperty(window, 'matchMedia', {

@@ -1,13 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AppShell } from './AppShell'
-
-// useTheme's effect never removes the `dark` class on unmount, and RTL's cleanup()
-// doesn't touch document.documentElement — reset it so test order can't matter.
-afterEach(() => {
-  document.documentElement.classList.remove('dark')
-})
 
 describe('AppShell', () => {
   it('renders all 5 wizard steps with the current one marked active', () => {
@@ -23,7 +17,7 @@ describe('AppShell', () => {
     }
 
     expect(screen.getByRole('button', { name: 'Mapowanie' })).toHaveAttribute('data-active', 'true')
-    expect(screen.getByRole('button', { name: 'Upload' })).toHaveAttribute('data-active', 'false')
+    expect(screen.getByRole('button', { name: 'Upload' })).not.toHaveAttribute('data-active')
   })
 
   it('disables steps after the current one', () => {

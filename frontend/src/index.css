@@ -76,7 +76,7 @@
   --sidebar-primary-foreground: #171717;
   --sidebar-accent: #262626;
   --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #ffffff;
+  --sidebar-border: #404040;
   --sidebar-ring: #525252;
 }
 
@@ -123,6 +123,10 @@
 }
 
 @layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);

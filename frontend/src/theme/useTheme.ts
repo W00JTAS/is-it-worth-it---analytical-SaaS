@@ -5,8 +5,12 @@ export type Theme = 'light' | 'dark'
 const STORAGE_KEY = 'isItWorthIt.theme'
 
 function getStoredTheme(): Theme | null {
-  const stored = window.localStorage.getItem(STORAGE_KEY)
-  return stored === 'light' || stored === 'dark' ? stored : null
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY)
+    return stored === 'light' || stored === 'dark' ? stored : null
+  } catch {
+    return null
+  }
 }
 
 function getSystemTheme(): Theme {
@@ -25,7 +29,11 @@ export function useTheme() {
   }, [theme])
 
   const setTheme = useCallback((next: Theme) => {
-    window.localStorage.setItem(STORAGE_KEY, next)
+    try {
+      window.localStorage.setItem(STORAGE_KEY, next)
+    } catch {
+      // ignore persistence failures (e.g. Safari private mode)
+    }
     setThemeState(next)
   }, [])
 
