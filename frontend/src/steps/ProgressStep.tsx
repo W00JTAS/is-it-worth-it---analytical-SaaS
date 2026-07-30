@@ -27,14 +27,14 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
   }
 
   const percent = scan.total_products > 0
-    ? Math.round((scan.completed_products / scan.total_products) * 100)
+    ? Math.min(100, Math.round((scan.completed_products / scan.total_products) * 100))
     : 0
   const isTerminal = scan.status === 'done' || scan.status === 'failed'
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 p-8">
       <h1 className="text-xl font-semibold text-foreground">Przebieg skanu</h1>
-      <Progress value={percent} />
+      <Progress value={percent} aria-label="Postęp skanu" />
       <p className="text-sm text-muted-foreground">
         {scan.completed_products} / {scan.total_products}
       </p>

@@ -51,6 +51,10 @@ describe('ProgressStep', () => {
 
     expect(screen.getByText(/skan zakończony/i)).toBeInTheDocument()
     expect(screen.getByText('20 / 20')).toBeInTheDocument()
+
+    const doneMessage = screen.getByText(/skan zakończony/i)
+    expect(doneMessage.className).toContain('text-success')
+    expect(doneMessage.className).not.toContain('text-destructive')
   })
 
   it('shows a distinct, non-success treatment when status is failed', () => {
