@@ -16,7 +16,8 @@ from app.providers.perplexity import PerplexityProvider
 from app.scans.engine import run_scan
 from app.scans.orchestration import create_scan
 from app.scans.store import ScanStore
-from app.sources.column_mapping import ColumnMappingError
+from app.sources.column_mapping import ColumnMapping, ColumnMappingError
+from app.sources.csv_preview import CsvPreview, build_csv_preview
 from app.sources.csv_source import EmptyCsvError
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,49 @@ def _scan_to_dict(scan) -> dict:
     }
 
 
+def _csv_preview_to_dict(preview: CsvPreview) -> dict:
+    return {
+        "headers": preview.headers,
+        "mapping": {
+            "name": preview.mapping.name,
+            "wholesale_price": preview.mapping.wholesale_price,
+            "ean": preview.mapping.ean,
+            "category": preview.mapping.category,
+            "sku": preview.mapping.sku,
+        },
+        "sample_rows": preview.sample_rows,
+        "total_rows": preview.total_rows,
+        "parsed_count": preview.parsed_count,
+        "warnings": preview.warnings,
+        "warning_count": preview.warning_count,
+    }
+
+
+def _column_mapping_from_form(
+    name_column: str | None,
+    wholesale_price_column: str | None,
+    ean_column: str | None,
+    category_column: str | None,
+    sku_column: str | None,
+) -> ColumnMapping | None:
+    required = (name_column, wholesale_price_column, ean_column, category_column)
+    provided = [f for f in required if f is not None]
+    if not provided:
+        return None
+    if len(provided) != len(required):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "provide all of name_column/wholesale_price_column/ean_column/"
+                "category_column, or none"
+            ),
+        )
+    return ColumnMapping(
+        name=name_column, wholesale_price=wholesale_price_column,
+        ean=ean_column, category=category_column, sku=sku_column,
+    )
+
+
 def _sample_seed_from_csv(csv_bytes: bytes) -> int:
     # Deterministic per-upload seed derived from the file's actual content (not
     # just its length) so re-uploading the same file sample the same products;
@@ -144,6 +188,26 @@ async def _run_scan_and_guard(
                 )
     finally:
         _scans_in_flight.discard(scan_id)
+
+
+@router.post("/csv/preview")
+async def post_csv_preview(
+    file: UploadFile,
+    name_column: str | None = Form(None),
+    wholesale_price_column: str | None = Form(None),
+    ean_column: str | None = Form(None),
+    category_column: str | None = Form(None),
+    sku_column: str | None = Form(None),
+):
+    mapping = _column_mapping_from_form(
+        name_column, wholesale_price_column, ean_column, category_column, sku_column,
+    )
+    csv_bytes = await file.read()
+    try:
+        preview = build_csv_preview(csv_bytes, tenant_id="default", mapping_override=mapping)
+    except EmptyCsvError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _csv_preview_to_dict(preview)
 
 
 @router.post("/scans")

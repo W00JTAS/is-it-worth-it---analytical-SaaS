@@ -404,3 +404,87 @@ def test_events_stream_stops_after_bounded_estimated_ticks(tmp_path, monkeypatch
 
     assert response.status_code == 200
     assert '"status": "timeout"' in response.text
+
+
+def test_csv_preview_returns_auto_detected_mapping_and_sample_rows(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/csv/preview", files={"file": ("catalog.csv", io.BytesIO(CSV_BYTES), "text/csv")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["headers"] == ["nazwa", "cena", "ean", "kategoria"]
+    assert body["mapping"] == {
+        "name": "nazwa", "wholesale_price": "cena", "ean": "ean", "category": "kategoria", "sku": None,
+    }
+    assert body["total_rows"] == 1
+    assert body["parsed_count"] == 1
+    assert body["sample_rows"][0]["nazwa"] == "Produkt A"
+
+
+def test_csv_preview_returns_null_for_unresolved_field_instead_of_400(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    csv_bytes = ("nazwa;kategoria\nProdukt A;Elektronika\n").encode("utf-8")
+
+    response = client.post(
+        "/csv/preview", files={"file": ("catalog.csv", io.BytesIO(csv_bytes), "text/csv")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mapping"]["wholesale_price"] is None
+    assert body["mapping"]["ean"] is None
+    assert body["parsed_count"] == 0
+
+
+def test_csv_preview_honors_a_full_mapping_override(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    # A header where the auto-detector would pick "cena" for price; override to point
+    # wholesale_price at the ean column instead, to prove the override actually changes parsing.
+    csv_bytes = (
+        "nazwa;cena;ean;kategoria\n"
+        "Produkt A;10,00;5901234123457;Elektronika\n"
+    ).encode("utf-8")
+
+    response = client.post(
+        "/csv/preview",
+        files={"file": ("catalog.csv", io.BytesIO(csv_bytes), "text/csv")},
+        data={
+            "name_column": "nazwa", "wholesale_price_column": "ean",
+            "ean_column": "cena", "category_column": "kategoria",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mapping"]["wholesale_price"] == "ean"
+    assert body["mapping"]["ean"] == "cena"
+
+
+def test_csv_preview_rejects_partial_mapping_subset(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/csv/preview",
+        files={"file": ("catalog.csv", io.BytesIO(CSV_BYTES), "text/csv")},
+        data={"name_column": "nazwa"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_csv_preview_rejects_empty_csv_file(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/csv/preview", files={"file": ("catalog.csv", io.BytesIO(b""), "text/csv")},
+    )
+
+    assert response.status_code == 400
