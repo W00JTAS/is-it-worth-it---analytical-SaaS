@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getReportProducts, getReportSummary } from '../api/client'
 import { ApiError } from '../api/types'
 import type { CostConfigInput, ProductRow, ReportSummary, ProductPage } from '../api/types'
@@ -137,9 +137,20 @@ interface ReportStepProps {
 
 export function ReportStep({ scanId }: ReportStepProps) {
   const [costConfig, setCostConfig] = useState<CostConfigInput>(loadStoredCostConfig)
+  // The cost config values actually confirmed by the last successful
+  // "Przelicz" click (or the initial mount load) — as opposed to `costConfig`,
+  // which tracks every keystroke in the input fields below. Product-list
+  // requests (filter/sort/pager) must use this snapshot, never the live,
+  // possibly-unconfirmed `costConfig`, so a mid-edit field never silently
+  // gets sent to the backend. See recalculate().
+  const [appliedCostConfig, setAppliedCostConfig] = useState<CostConfigInput>(loadStoredCostConfig)
   const [summary, setSummary] = useState<ReportSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  // Starts true: the mount effect below always kicks off an initial
+  // recalculate() before the user can interact, so there is no real "idle"
+  // frame — starting false would let the empty-state text flash for one
+  // render before the effect flips this to true.
+  const [isLoading, setIsLoading] = useState(true)
   const [category, setCategory] = useState('')
   const [status, setStatus] = useState('')
   const [sort, setSort] = useState('category')
@@ -147,22 +158,42 @@ export function ReportStep({ scanId }: ReportStepProps) {
   const [productsError, setProductsError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
 
-  async function loadProducts(overrides: { category?: string; status?: string; sort?: string; page: number }) {
+  // Discard a response if a newer request of the same kind has since
+  // superseded it — mirrors ScopeEstimateStep's estimateRequestIdRef. Two
+  // separate counters (one per request type) keep each guard scoped to the
+  // specific request it protects.
+  const summaryRequestIdRef = useRef(0)
+  const productsRequestIdRef = useRef(0)
+
+  async function loadProducts(
+    overrides: { category?: string; status?: string; sort?: string; page: number },
+    costConfigOverride?: CostConfigInput,
+  ) {
+    const requestId = ++productsRequestIdRef.current
     setProductsError(null)
     const effectiveCategory = overrides.category ?? category
     const effectiveStatus = overrides.status ?? status
     const effectiveSort = overrides.sort ?? sort
+    // Read the confirmed snapshot, not the live (possibly unconfirmed)
+    // costConfig — except right after recalculate() confirms a new value,
+    // where the override is passed explicitly to avoid a stale-closure read
+    // of appliedCostConfig before its setState has committed.
+    const effectiveCostConfig = costConfigOverride ?? appliedCostConfig
     try {
-      const result = await getReportProducts(scanId, costConfig, {
+      const result = await getReportProducts(scanId, effectiveCostConfig, {
         category: effectiveCategory || undefined,
         status: effectiveStatus || undefined,
         sort: effectiveSort,
         page: overrides.page,
         pageSize: PAGE_SIZE,
       })
-      setProductPage(result)
+      if (productsRequestIdRef.current === requestId) {
+        setProductPage(result)
+      }
     } catch (err) {
-      setProductsError(err instanceof ApiError ? err.message : 'Nie udało się wczytać produktów')
+      if (productsRequestIdRef.current === requestId) {
+        setProductsError(err instanceof ApiError ? err.message : 'Nie udało się wczytać produktów')
+      }
     }
   }
 
@@ -192,17 +223,24 @@ export function ReportStep({ scanId }: ReportStepProps) {
   }
 
   async function recalculate() {
+    const requestId = ++summaryRequestIdRef.current
     setError(null)
     setIsLoading(true)
     try {
       const result = await getReportSummary(scanId, costConfig)
+      if (summaryRequestIdRef.current !== requestId) return
       setSummary(result)
+      setAppliedCostConfig(costConfig)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(costConfig))
-      await loadProducts({ page: 1 })
+      await loadProducts({ page: 1 }, costConfig)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Nie udało się policzyć raportu')
+      if (summaryRequestIdRef.current === requestId) {
+        setError(err instanceof ApiError ? err.message : 'Nie udało się policzyć raportu')
+      }
     } finally {
-      setIsLoading(false)
+      if (summaryRequestIdRef.current === requestId) {
+        setIsLoading(false)
+      }
     }
   }
 
@@ -219,9 +257,9 @@ export function ReportStep({ scanId }: ReportStepProps) {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-16 p-8">
       <section className="flex flex-col items-center gap-2 text-center">
-        {verdictValue === null ? (
-          <p className="text-2xl font-medium text-slate-400">Brak danych do policzenia</p>
-        ) : (
+        {isLoading ? (
+          <p className="text-2xl font-medium text-slate-400">Liczenie…</p>
+        ) : verdictValue !== null ? (
           <>
             <p
               className={`text-6xl font-semibold tabular-nums ${
@@ -236,6 +274,13 @@ export function ReportStep({ scanId }: ReportStepProps) {
               produktów rentownych przy cenie rynkowej
             </p>
           </>
+        ) : error ? null : (
+          // Only reachable once a request has actually succeeded with zero
+          // computable products, or before anything has ever loaded (and no
+          // error/loading is in progress) — never while loading or after a
+          // failed request, so this text no longer contradicts the error
+          // message or flashes during every load.
+          <p className="text-2xl font-medium text-slate-400">Brak danych do policzenia</p>
         )}
       </section>
 
@@ -376,6 +421,8 @@ export function ReportStep({ scanId }: ReportStepProps) {
           </table>
         </section>
       )}
+
+      {productsError && !productPage && <p className="text-sm text-red-400">{productsError}</p>}
 
       {productPage && (
         <section className="flex flex-col gap-4">

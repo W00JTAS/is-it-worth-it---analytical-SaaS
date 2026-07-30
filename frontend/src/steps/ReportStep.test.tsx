@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ReportStep } from './ReportStep'
 import * as client from '../api/client'
+import type { ProductPage } from '../api/types'
 
 const SUMMARY = {
   counts: { total: 10, computable: 8, not_checked: 0, no_offer: 1, currency_mismatch: 0, anomaly: 1 },
@@ -111,10 +112,27 @@ describe('ReportStep', () => {
     render(<ReportStep scanId="scan-1" />)
 
     expect(await screen.findByText('scan not found')).toBeInTheDocument()
+    // The failure is a genuine error, not "nothing to compute" — the two
+    // must never be asserted simultaneously.
+    expect(screen.queryByText('Brak danych do policzenia')).not.toBeInTheDocument()
+  })
+
+  it('does not show the empty-state text while the initial summary request is still loading', async () => {
+    let resolveSummary: (value: typeof SUMMARY) => void = () => {}
+    const pending = new Promise<typeof SUMMARY>((resolve) => {
+      resolveSummary = resolve
+    })
+    vi.spyOn(client, 'getReportSummary').mockReturnValue(pending)
+    render(<ReportStep scanId="scan-1" />)
+
+    expect(screen.queryByText('Brak danych do policzenia')).not.toBeInTheDocument()
+
+    resolveSummary(SUMMARY)
+    expect(await screen.findByText('+12.0%')).toBeInTheDocument()
   })
 })
 
-const PRODUCT_PAGE = {
+const PRODUCT_PAGE: ProductPage = {
   total: 2,
   page: 1,
   page_size: 25,
@@ -185,6 +203,38 @@ describe('ReportStep product drill-down', () => {
         { category: undefined, status: 'no_offer', sort: 'category', page: 1, pageSize: 25 },
       ),
     )
+  })
+
+  it('uses the last-applied cost config, not an unconfirmed edit, when a filter changes', async () => {
+    vi.spyOn(client, 'getReportSummary').mockResolvedValue(SUMMARY)
+    const productsSpy = vi.spyOn(client, 'getReportProducts').mockResolvedValue(PRODUCT_PAGE)
+    render(<ReportStep scanId="scan-1" />)
+    await screen.findByText('Zebra Gadget')
+
+    const commissionInput = screen.getByLabelText('Prowizja')
+    await userEvent.clear(commissionInput)
+    await userEvent.type(commissionInput, '0.99')
+    // Przelicz is deliberately NOT clicked — the edit above must stay
+    // unconfirmed and not leak into the filter request below.
+
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'no_offer')
+
+    await waitFor(() =>
+      expect(productsSpy).toHaveBeenLastCalledWith(
+        'scan-1',
+        { commissionPct: '0.15', shippingCost: '0.00', vatPct: '0.23', returnsPct: '0.05' },
+        { category: undefined, status: 'no_offer', sort: 'category', page: 1, pageSize: 25 },
+      ),
+    )
+  })
+
+  it('shows the products error even when the very first product load fails (no product page ever set)', async () => {
+    vi.spyOn(client, 'getReportSummary').mockResolvedValue(SUMMARY)
+    const { ApiError } = await import('../api/types')
+    vi.spyOn(client, 'getReportProducts').mockRejectedValue(new ApiError('products boom', 500))
+    render(<ReportStep scanId="scan-1" />)
+
+    expect(await screen.findByText('products boom')).toBeInTheDocument()
   })
 
   it('requests the next page when Następna is clicked', async () => {
