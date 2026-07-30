@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from './types'
-import { createScan, getScan, startScan, getReportSummary, getReportProducts } from './client'
-import type { ScopeConfig } from './types'
+import { createScan, getScan, startScan, getReportSummary, getReportProducts, getCsvPreview } from './client'
+import type { ColumnMapping, ScopeConfig } from './types'
 
 const SCAN_JSON = {
   scan_id: 'scan-1',
@@ -219,5 +219,102 @@ describe('getReportProducts', () => {
     const [url] = vi.mocked(fetch).mock.calls[0]
     expect(url).toContain('page=1')
     expect(url).toContain('page_size=50')
+  })
+})
+
+const CSV_PREVIEW = {
+  headers: ['Nazwa', 'Cena hurtowa', 'EAN', 'Kategoria'],
+  mapping: { name: 'Nazwa', wholesale_price: 'Cena hurtowa', ean: 'EAN', category: 'Kategoria', sku: null },
+  sample_rows: [{ Nazwa: 'Produkt A', 'Cena hurtowa': '10,00', EAN: '5901234123457', Kategoria: 'Elektronika' }],
+  total_rows: 1,
+  parsed_count: 1,
+  warnings: [],
+  warning_count: 0,
+}
+
+describe('getCsvPreview', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('posts the file with no mapping fields when no override is given', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(CSV_PREVIEW))
+    const file = new File(['a,b\n1,2'], 'catalog.csv', { type: 'text/csv' })
+
+    const result = await getCsvPreview(file)
+
+    expect(result).toEqual(CSV_PREVIEW)
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/csv/preview')
+    expect(init?.method).toBe('POST')
+    const body = init?.body as FormData
+    expect(body.get('file')).toBeInstanceOf(File)
+    expect(body.get('name_column')).toBeNull()
+  })
+
+  it('posts only the non-null mapping fields when an override is given', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(CSV_PREVIEW))
+    const file = new File(['a,b\n1,2'], 'catalog.csv', { type: 'text/csv' })
+    const mapping: ColumnMapping = {
+      name: 'Nazwa', wholesale_price: 'Cena hurtowa', ean: 'EAN', category: 'Kategoria', sku: null,
+    }
+
+    await getCsvPreview(file, mapping)
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]
+    const body = init?.body as FormData
+    expect(body.get('name_column')).toBe('Nazwa')
+    expect(body.get('wholesale_price_column')).toBe('Cena hurtowa')
+    expect(body.get('ean_column')).toBe('EAN')
+    expect(body.get('category_column')).toBe('Kategoria')
+    expect(body.get('sku_column')).toBeNull()
+  })
+
+  it('throws ApiError on a non-2xx response', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ detail: 'CSV file has no header row' }, 400))
+    const file = new File([''], 'catalog.csv', { type: 'text/csv' })
+
+    await expect(getCsvPreview(file)).rejects.toMatchObject({ status: 400 })
+  })
+})
+
+describe('createScan with a column mapping', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('includes mapping fields in the form data when columnMapping is provided', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({
+        scan_id: 'scan-1', status: 'estimated', scope_type: 'full',
+        total_products: 1, completed_products: 0,
+        estimate: {
+          queries_without_refresh: 1, queries_with_refresh: 1,
+          cost_usd_without_refresh: '0.01', cost_usd_with_refresh: '0.01',
+          seconds_without_refresh: 1, seconds_with_refresh: 1,
+        },
+        overlapping_count: 0, stale_count: 0, warnings: [],
+      }),
+    )
+    const file = new File(['a,b\n1,2'], 'catalog.csv', { type: 'text/csv' })
+    const mapping: ColumnMapping = {
+      name: 'Nazwa', wholesale_price: 'Cena hurtowa', ean: 'EAN', category: 'Kategoria', sku: 'SKU',
+    }
+    const scope: ScopeConfig = {
+      scopeType: 'full', market: 'PL', maxDeliveryDays: 5, maxConcurrency: 5, stalenessThresholdDays: 14,
+    }
+
+    await createScan(file, scope, mapping)
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]
+    const body = init?.body as FormData
+    expect(body.get('name_column')).toBe('Nazwa')
+    expect(body.get('sku_column')).toBe('SKU')
   })
 })

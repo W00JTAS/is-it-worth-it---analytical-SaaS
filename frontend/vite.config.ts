@@ -9,6 +9,7 @@ export default defineConfig({
     proxy: {
       '/scans': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
+      '/csv': 'http://localhost:8000',
     },
   },
   test: {

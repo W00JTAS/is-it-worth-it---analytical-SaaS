@@ -121,3 +121,21 @@ export interface ProductPage {
   page_size: number
   rows: ProductRow[]
 }
+
+export interface ColumnMapping {
+  name: string | null
+  wholesale_price: string | null
+  ean: string | null
+  category: string | null
+  sku: string | null
+}
+
+export interface CsvPreview {
+  headers: string[]
+  mapping: ColumnMapping
+  sample_rows: Record<string, string>[]
+  total_rows: number
+  parsed_count: number
+  warnings: string[]
+  warning_count: number
+}

@@ -4,6 +4,8 @@ import type {
   CostConfigInput,
   ProductPage,
   ReportSummary,
+  ColumnMapping,
+  CsvPreview,
 } from './types'
 
 async function errorDetail(response: Response): Promise<string> {
@@ -16,7 +18,19 @@ async function errorDetail(response: Response): Promise<string> {
   return `Request failed with status ${response.status}`
 }
 
-export async function createScan(file: File, scope: ScopeConfig): Promise<CreateScanResult> {
+function appendColumnMapping(formData: FormData, mapping: ColumnMapping): void {
+  if (mapping.name !== null) formData.append('name_column', mapping.name)
+  if (mapping.wholesale_price !== null) formData.append('wholesale_price_column', mapping.wholesale_price)
+  if (mapping.ean !== null) formData.append('ean_column', mapping.ean)
+  if (mapping.category !== null) formData.append('category_column', mapping.category)
+  if (mapping.sku !== null) formData.append('sku_column', mapping.sku)
+}
+
+export async function createScan(
+  file: File,
+  scope: ScopeConfig,
+  columnMapping?: ColumnMapping,
+): Promise<CreateScanResult> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('scope_type', scope.scopeType)
@@ -27,6 +41,7 @@ export async function createScan(file: File, scope: ScopeConfig): Promise<Create
   formData.append('max_delivery_days', String(scope.maxDeliveryDays))
   formData.append('max_concurrency', String(scope.maxConcurrency))
   formData.append('staleness_threshold_days', String(scope.stalenessThresholdDays))
+  if (columnMapping) appendColumnMapping(formData, columnMapping)
 
   const response = await fetch('/scans', { method: 'POST', body: formData })
   if (!response.ok) {
@@ -96,6 +111,18 @@ export async function getReportProducts(
   query.set('page_size', String(params.pageSize ?? 50))
 
   const response = await fetch(`/scans/${scanId}/report/products?${query}`)
+  if (!response.ok) {
+    throw new ApiError(await errorDetail(response), response.status)
+  }
+  return response.json()
+}
+
+export async function getCsvPreview(file: File, mappingOverride?: ColumnMapping): Promise<CsvPreview> {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (mappingOverride) appendColumnMapping(formData, mappingOverride)
+
+  const response = await fetch('/csv/preview', { method: 'POST', body: formData })
   if (!response.ok) {
     throw new ApiError(await errorDetail(response), response.status)
   }
