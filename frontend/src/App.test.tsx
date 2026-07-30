@@ -18,6 +18,15 @@ describe('App (ScanWizard)', () => {
       overlapping_count: 0, stale_count: 0, warnings: [],
     })
     vi.spyOn(client, 'startScan').mockResolvedValue(undefined)
+    vi.spyOn(client, 'getCsvPreview').mockResolvedValue({
+      headers: ['nazwa', 'cena', 'ean', 'kategoria'],
+      mapping: { name: 'nazwa', wholesale_price: 'cena', ean: 'ean', category: 'kategoria', sku: null },
+      sample_rows: [],
+      total_rows: 0,
+      parsed_count: 0,
+      warnings: [],
+      warning_count: 0,
+    })
     vi.spyOn(useScanEventsModule, 'useScanEvents').mockReturnValue({
       scan: {
         scan_id: 'scan-1', status: 'running', scope_type: 'full',
@@ -37,6 +46,9 @@ describe('App (ScanWizard)', () => {
 
     const file = new File(['nazwa;cena'], 'catalog.csv', { type: 'text/csv' })
     await userEvent.upload(screen.getByLabelText(/plik CSV/i), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
+
+    await screen.findByRole('heading', { name: 'Mapowanie kolumn' })
     await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
 
     await screen.findByRole('heading', { name: 'Zakres skanu' })
@@ -60,6 +72,15 @@ describe('App (ScanWizard)', () => {
       overlapping_count: 0, stale_count: 0, warnings: [],
     })
     vi.spyOn(client, 'startScan').mockResolvedValue(undefined)
+    vi.spyOn(client, 'getCsvPreview').mockResolvedValue({
+      headers: ['nazwa', 'cena', 'ean', 'kategoria'],
+      mapping: { name: 'nazwa', wholesale_price: 'cena', ean: 'ean', category: 'kategoria', sku: null },
+      sample_rows: [],
+      total_rows: 0,
+      parsed_count: 0,
+      warnings: [],
+      warning_count: 0,
+    })
     vi.spyOn(useScanEventsModule, 'useScanEvents').mockReturnValue({
       scan: {
         scan_id: 'scan-1', status: 'done', scope_type: 'full',
@@ -90,6 +111,8 @@ describe('App (ScanWizard)', () => {
 
     const file = new File(['nazwa;cena'], 'catalog.csv', { type: 'text/csv' })
     await userEvent.upload(screen.getByLabelText(/plik CSV/i), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
+    await screen.findByRole('heading', { name: 'Mapowanie kolumn' })
     await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
     await screen.findByRole('heading', { name: 'Zakres skanu' })
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))

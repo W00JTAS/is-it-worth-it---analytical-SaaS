@@ -1,14 +1,17 @@
 import { useState } from 'react'
 import { UploadStep } from './steps/UploadStep'
+import { MappingStep } from './steps/MappingStep'
 import { ScopeEstimateStep } from './steps/ScopeEstimateStep'
 import { ProgressStep } from './steps/ProgressStep'
 import { ReportStep } from './steps/ReportStep'
+import type { ColumnMapping } from './api/types'
 
-type WizardStep = 'upload' | 'scope' | 'progress' | 'report'
+type WizardStep = 'upload' | 'mapping' | 'scope' | 'progress' | 'report'
 
 function App() {
   const [step, setStep] = useState<WizardStep>('upload')
   const [file, setFile] = useState<File | null>(null)
+  const [columnMapping, setColumnMapping] = useState<ColumnMapping | null>(null)
   const [scanId, setScanId] = useState<string | null>(null)
 
   return (
@@ -17,13 +20,23 @@ function App() {
         <UploadStep
           onFileSelected={(selected) => {
             setFile(selected)
+            setStep('mapping')
+          }}
+        />
+      )}
+      {step === 'mapping' && file && (
+        <MappingStep
+          file={file}
+          onConfirmed={(mapping) => {
+            setColumnMapping(mapping)
             setStep('scope')
           }}
         />
       )}
-      {step === 'scope' && file && (
+      {step === 'scope' && file && columnMapping && (
         <ScopeEstimateStep
           file={file}
+          columnMapping={columnMapping}
           onStarted={(id) => {
             setScanId(id)
             setStep('progress')

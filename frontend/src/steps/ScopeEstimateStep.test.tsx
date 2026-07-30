@@ -3,8 +3,13 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ScopeEstimateStep } from './ScopeEstimateStep'
 import * as client from '../api/client'
+import type { ColumnMapping } from '../api/types'
 
 const FILE = new File(['nazwa;cena'], 'catalog.csv', { type: 'text/csv' })
+
+const MAPPING: ColumnMapping = {
+  name: 'nazwa', wholesale_price: 'cena', ean: 'ean', category: 'kategoria', sku: null,
+}
 
 const CREATE_RESULT = {
   scan_id: 'scan-1',
@@ -35,19 +40,23 @@ afterEach(() => {
 describe('ScopeEstimateStep', () => {
   it('creates a scan with full scope by default and shows the estimate', async () => {
     const createScanSpy = vi.spyOn(client, 'createScan').mockResolvedValue(CREATE_RESULT)
-    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} />)
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
 
     await waitFor(() => expect(createScanSpy).toHaveBeenCalledTimes(1))
-    expect(createScanSpy).toHaveBeenCalledWith(FILE, {
-      scopeType: 'full',
-      samplePerCategory: undefined,
-      market: 'PL',
-      maxDeliveryDays: 5,
-      maxConcurrency: 5,
-      stalenessThresholdDays: 14,
-    })
+    expect(createScanSpy).toHaveBeenCalledWith(
+      FILE,
+      {
+        scopeType: 'full',
+        samplePerCategory: undefined,
+        market: 'PL',
+        maxDeliveryDays: 5,
+        maxConcurrency: 5,
+        stalenessThresholdDays: 14,
+      },
+      MAPPING,
+    )
     expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
     expect(screen.getByText(/0\.08 USD.*~4s/)).toBeInTheDocument()
     expect(screen.getByText(/z odświeżaniem/i)).toBeInTheDocument()
@@ -59,7 +68,7 @@ describe('ScopeEstimateStep', () => {
 
   it('sends sample_per_category when the sample scope is chosen', async () => {
     const createScanSpy = vi.spyOn(client, 'createScan').mockResolvedValue(CREATE_RESULT)
-    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} />)
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
     await userEvent.click(screen.getByLabelText('Próbka per kategoria'))
     await userEvent.clear(screen.getByLabelText(/liczba produktów per kategoria/i))
@@ -70,6 +79,7 @@ describe('ScopeEstimateStep', () => {
       expect(createScanSpy).toHaveBeenCalledWith(
         FILE,
         expect.objectContaining({ scopeType: 'sample', samplePerCategory: 25 }),
+        MAPPING,
       ),
     )
   })
@@ -78,7 +88,7 @@ describe('ScopeEstimateStep', () => {
     vi.spyOn(client, 'createScan').mockResolvedValue(CREATE_RESULT)
     const startScanSpy = vi.spyOn(client, 'startScan').mockResolvedValue(undefined)
     const onStarted = vi.fn()
-    render(<ScopeEstimateStep file={FILE} onStarted={onStarted} />)
+    render(<ScopeEstimateStep file={FILE} onStarted={onStarted} columnMapping={MAPPING} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
     await screen.findByText(/bez odświeżania/i)
@@ -91,7 +101,7 @@ describe('ScopeEstimateStep', () => {
 
   it('clears a stale estimate when the scope config changes afterward', async () => {
     const createScanSpy = vi.spyOn(client, 'createScan').mockResolvedValue(CREATE_RESULT)
-    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} />)
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
     expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
@@ -106,7 +116,7 @@ describe('ScopeEstimateStep', () => {
 
   it('does not show the overlap line when overlapping_count is zero', async () => {
     vi.spyOn(client, 'createScan').mockResolvedValue({ ...CREATE_RESULT, overlapping_count: 0 })
-    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} />)
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
 
@@ -122,7 +132,7 @@ describe('ScopeEstimateStep', () => {
           resolveCreateScan = resolve
         }),
     )
-    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} />)
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
     await waitFor(() => expect(createScanSpy).toHaveBeenCalledTimes(1))
@@ -166,10 +176,20 @@ describe('ScopeEstimateStep', () => {
     vi.spyOn(client, 'createScan').mockRejectedValue(
       new ApiError('max_concurrency must be >= 1, got 0', 400),
     )
-    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} />)
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
 
     expect(await screen.findByText('max_concurrency must be >= 1, got 0')).toBeInTheDocument()
+  })
+
+  it('passes the confirmed column mapping through to createScan', async () => {
+    const createScanSpy = vi.spyOn(client, 'createScan').mockResolvedValue(CREATE_RESULT)
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
+
+    await waitFor(() => expect(createScanSpy).toHaveBeenCalledTimes(1))
+    expect(createScanSpy).toHaveBeenCalledWith(FILE, expect.anything(), MAPPING)
   })
 })

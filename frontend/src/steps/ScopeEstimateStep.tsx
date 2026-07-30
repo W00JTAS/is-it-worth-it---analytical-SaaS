@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
 import { createScan, startScan } from '../api/client'
 import { ApiError } from '../api/types'
-import type { CreateScanResult, ScopeType } from '../api/types'
+import type { ColumnMapping, CreateScanResult, ScopeType } from '../api/types'
 
 interface ScopeEstimateStepProps {
   file: File
+  columnMapping: ColumnMapping
   onStarted: (scanId: string) => void
 }
 
@@ -18,7 +19,7 @@ function pluralizeProdukt(n: number): string {
   return 'produktów'
 }
 
-export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
+export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstimateStepProps) {
   const [scopeType, setScopeType] = useState<ScopeType>('full')
   const [samplePerCategory, setSamplePerCategory] = useState('50')
   const [maxDeliveryDays, setMaxDeliveryDays] = useState(5)
@@ -74,14 +75,18 @@ export function ScopeEstimateStep({ file, onStarted }: ScopeEstimateStepProps) {
     setError(null)
     setIsEstimating(true)
     try {
-      const created = await createScan(file, {
-        scopeType,
-        samplePerCategory: scopeType === 'sample' ? Number(samplePerCategory) : undefined,
-        market: 'PL',
-        maxDeliveryDays,
-        maxConcurrency,
-        stalenessThresholdDays,
-      })
+      const created = await createScan(
+        file,
+        {
+          scopeType,
+          samplePerCategory: scopeType === 'sample' ? Number(samplePerCategory) : undefined,
+          market: 'PL',
+          maxDeliveryDays,
+          maxConcurrency,
+          stalenessThresholdDays,
+        },
+        columnMapping,
+      )
       // Discard this response if a newer request has since superseded it —
       // otherwise a stale estimate could win the race and be shown/started
       // against a config the user has since changed.
