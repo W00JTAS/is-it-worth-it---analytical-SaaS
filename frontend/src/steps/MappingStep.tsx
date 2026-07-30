@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCsvPreview } from '../api/client'
 import { ApiError } from '../api/types'
 import type { ColumnMapping, CsvPreview } from '../api/types'
@@ -21,18 +21,42 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
   const [mapping, setMapping] = useState<ColumnMapping>(EMPTY_MAPPING)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  // Guards against a stale loadPreview response overwriting a newer one --
+  // e.g. the user edits a dropdown while a previously-triggered "Odśwież
+  // podgląd" request is still in flight. The dropdowns are also disabled
+  // while `isLoading` (primary fix, see the `disabled={isLoading}` selects
+  // below); this counter is defense in depth in case that disabling is ever
+  // bypassed or removed. Mirrors ScopeEstimateStep's estimateRequestIdRef.
+  const previewRequestIdRef = useRef(0)
 
   const loadPreview = useCallback(async (override?: ColumnMapping) => {
+    const requestId = ++previewRequestIdRef.current
     setError(null)
     setIsLoading(true)
     try {
       const result = await getCsvPreview(file, override)
-      setPreview(result)
-      setMapping(result.mapping)
+      if (previewRequestIdRef.current === requestId) {
+        setPreview(result)
+        // Only adopt the backend's `mapping` on the INITIAL load (no
+        // override -- pure auto-detection, nothing local to preserve yet).
+        // On a user-initiated refresh (override provided), the local
+        // `mapping` state IS the current source of truth for what the user
+        // has chosen -- adopting the response here would silently revert an
+        // explicitly-cleared field (e.g. SKU) back to its auto-detected
+        // value, since the backend's `or`-based merge can't distinguish
+        // "not sent" from "explicitly cleared to null".
+        if (override === undefined) {
+          setMapping(result.mapping)
+        }
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Nie udało się wczytać podglądu pliku')
+      if (previewRequestIdRef.current === requestId) {
+        setError(err instanceof ApiError ? err.message : 'Nie udało się wczytać podglądu pliku')
+      }
     } finally {
-      setIsLoading(false)
+      if (previewRequestIdRef.current === requestId) {
+        setIsLoading(false)
+      }
     }
   }, [file])
 
@@ -70,6 +94,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                 <select
                   value={mapping.name ?? ''}
                   onChange={(e) => handleFieldChange('name', e.target.value)}
+                  disabled={isLoading}
                   className="w-56 rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
                 >
                   <option value="">— wybierz —</option>
@@ -83,6 +108,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                 <select
                   value={mapping.wholesale_price ?? ''}
                   onChange={(e) => handleFieldChange('wholesale_price', e.target.value)}
+                  disabled={isLoading}
                   className="w-56 rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
                 >
                   <option value="">— wybierz —</option>
@@ -96,6 +122,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                 <select
                   value={mapping.ean ?? ''}
                   onChange={(e) => handleFieldChange('ean', e.target.value)}
+                  disabled={isLoading}
                   className="w-56 rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
                 >
                   <option value="">— wybierz —</option>
@@ -109,6 +136,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                 <select
                   value={mapping.category ?? ''}
                   onChange={(e) => handleFieldChange('category', e.target.value)}
+                  disabled={isLoading}
                   className="w-56 rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
                 >
                   <option value="">— wybierz —</option>
@@ -122,6 +150,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                 <select
                   value={mapping.sku ?? ''}
                   onChange={(e) => handleFieldChange('sku', e.target.value)}
+                  disabled={isLoading}
                   className="w-56 rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
                 >
                   <option value="">— brak —</option>
@@ -186,7 +215,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
           <button
             type="button"
             onClick={() => onConfirmed(mapping)}
-            disabled={!requiredFilled}
+            disabled={!requiredFilled || isLoading}
             className="self-start rounded-md bg-emerald-600 px-4 py-2 font-medium text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
           >
             Dalej

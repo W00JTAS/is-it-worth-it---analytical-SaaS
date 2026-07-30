@@ -104,4 +104,56 @@ describe('MappingStep', () => {
 
     expect(await screen.findByText('CSV file has no header row')).toBeInTheDocument()
   })
+
+  // --- Fix 2 (final whole-branch review): in-flight request guard ---------
+
+  it('disables all mapping selects and Dalej while a refresh request is in flight', async () => {
+    let resolveRefresh: (value: CsvPreview) => void = () => {}
+    const spy = vi.spyOn(client, 'getCsvPreview')
+    spy.mockResolvedValueOnce(PREVIEW)
+    render(<MappingStep file={FILE} onConfirmed={vi.fn()} />)
+    await screen.findByText('1 / 1 wierszy sparsowanych poprawnie')
+
+    spy.mockImplementationOnce(
+      () => new Promise<CsvPreview>((resolve) => { resolveRefresh = resolve }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Odśwież podgląd' }))
+
+    expect(screen.getByLabelText('Nazwa')).toBeDisabled()
+    expect(screen.getByLabelText('Cena hurtowa')).toBeDisabled()
+    expect(screen.getByLabelText('EAN')).toBeDisabled()
+    expect(screen.getByLabelText('Kategoria')).toBeDisabled()
+    expect(screen.getByLabelText('SKU (opcjonalne)')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Dalej' })).toBeDisabled()
+
+    resolveRefresh(PREVIEW)
+    await waitFor(() => expect(screen.getByLabelText('Nazwa')).toBeEnabled())
+  })
+
+  // --- Fix 3 (final whole-branch review): a refresh response must not -----
+  // --- silently revert a field the user already changed locally -----------
+
+  it('does not let a refresh response overwrite the mapping the user chose locally', async () => {
+    let resolveRefresh: (value: CsvPreview) => void = () => {}
+    const spy = vi.spyOn(client, 'getCsvPreview')
+    spy.mockResolvedValueOnce(PREVIEW)
+    render(<MappingStep file={FILE} onConfirmed={vi.fn()} />)
+    await screen.findByText('1 / 1 wierszy sparsowanych poprawnie')
+
+    // User clears SKU back to "-- brak --" and hits refresh. The backend's
+    // response (still echoing the auto-detected SKU, since `or`-based
+    // merging can't tell "cleared" from "not sent") must NOT un-clear it.
+    await userEvent.selectOptions(screen.getByLabelText('SKU (opcjonalne)'), '')
+    spy.mockImplementationOnce(
+      () => new Promise<CsvPreview>((resolve) => { resolveRefresh = resolve }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Odśwież podgląd' }))
+
+    // Backend echoes the auto-detected SKU back, as `_merge_mapping`'s `or`
+    // fallback would for a field sent as null.
+    resolveRefresh(PREVIEW)
+    await waitFor(() => expect(screen.getByLabelText('Nazwa')).toBeEnabled())
+
+    expect(screen.getByLabelText('SKU (opcjonalne)')).toHaveValue('')
+  })
 })
