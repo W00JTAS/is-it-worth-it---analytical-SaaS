@@ -1,5 +1,10 @@
 import { ApiError } from './types'
 import type { CreateScanResult, Scan, ScopeConfig } from './types'
+import type {
+  CostConfigInput,
+  ProductPage,
+  ReportSummary,
+} from './types'
 
 async function errorDetail(response: Response): Promise<string> {
   try {
@@ -43,6 +48,54 @@ export async function startScan(scanId: string, forceRefreshStale: boolean): Pro
 
 export async function getScan(scanId: string): Promise<Scan> {
   const response = await fetch(`/scans/${scanId}`)
+  if (!response.ok) {
+    throw new ApiError(await errorDetail(response), response.status)
+  }
+  return response.json()
+}
+
+function costConfigParams(costConfig: CostConfigInput): Record<string, string> {
+  return {
+    commission_pct: costConfig.commissionPct,
+    shipping_cost: costConfig.shippingCost,
+    vat_pct: costConfig.vatPct,
+    returns_pct: costConfig.returnsPct,
+  }
+}
+
+export async function getReportSummary(
+  scanId: string,
+  costConfig: CostConfigInput,
+): Promise<ReportSummary> {
+  const params = new URLSearchParams(costConfigParams(costConfig))
+  const response = await fetch(`/scans/${scanId}/report/summary?${params}`)
+  if (!response.ok) {
+    throw new ApiError(await errorDetail(response), response.status)
+  }
+  return response.json()
+}
+
+export interface ReportProductsParams {
+  category?: string
+  status?: string
+  sort?: string
+  page?: number
+  pageSize?: number
+}
+
+export async function getReportProducts(
+  scanId: string,
+  costConfig: CostConfigInput,
+  params: ReportProductsParams = {},
+): Promise<ProductPage> {
+  const query = new URLSearchParams(costConfigParams(costConfig))
+  if (params.category) query.set('category', params.category)
+  if (params.status) query.set('status', params.status)
+  if (params.sort) query.set('sort', params.sort)
+  query.set('page', String(params.page ?? 1))
+  query.set('page_size', String(params.pageSize ?? 50))
+
+  const response = await fetch(`/scans/${scanId}/report/products?${query}`)
   if (!response.ok) {
     throw new ApiError(await errorDetail(response), response.status)
   }

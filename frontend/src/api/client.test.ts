@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from './types'
-import { createScan, getScan, startScan } from './client'
+import { createScan, getScan, startScan, getReportSummary, getReportProducts } from './client'
 import type { ScopeConfig } from './types'
 
 const SCAN_JSON = {
@@ -138,5 +138,86 @@ describe('getScan', () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ detail: 'scan not found' }, 404))
 
     await expect(getScan('missing')).rejects.toMatchObject({ status: 404 })
+  })
+})
+
+describe('getReportSummary', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('sends cost config as query params and returns the parsed summary', async () => {
+    const summary = {
+      counts: { total: 1, computable: 1, not_checked: 0, no_offer: 0, currency_mismatch: 0, anomaly: 0 },
+      category_table: [],
+      scenario_matrix: [],
+    }
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(summary))
+
+    const result = await getReportSummary('scan-1', {
+      commissionPct: '0.10', shippingCost: '15.00', vatPct: '0.23', returnsPct: '0.02',
+    })
+
+    expect(result).toEqual(summary)
+    const [url] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toContain('/scans/scan-1/report/summary?')
+    expect(url).toContain('commission_pct=0.10')
+    expect(url).toContain('shipping_cost=15.00')
+    expect(url).toContain('vat_pct=0.23')
+    expect(url).toContain('returns_pct=0.02')
+  })
+
+  it('throws ApiError on a non-2xx response', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ detail: 'bad request' }, 400))
+
+    await expect(
+      getReportSummary('scan-1', {
+        commissionPct: '0.10', shippingCost: '15.00', vatPct: '0.23', returnsPct: '0.02',
+      }),
+    ).rejects.toMatchObject({ status: 400 })
+  })
+})
+
+describe('getReportProducts', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('sends pagination, filter, and sort params', async () => {
+    const page = { total: 0, page: 2, page_size: 10, rows: [] }
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(page))
+
+    const result = await getReportProducts(
+      'scan-1',
+      { commissionPct: '0.10', shippingCost: '15.00', vatPct: '0.23', returnsPct: '0.02' },
+      { category: 'Elektronika', status: 'computable', sort: 'margin_desc', page: 2, pageSize: 10 },
+    )
+
+    expect(result).toEqual(page)
+    const [url] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toContain('/scans/scan-1/report/products?')
+    expect(url).toContain('category=Elektronika')
+    expect(url).toContain('status=computable')
+    expect(url).toContain('sort=margin_desc')
+    expect(url).toContain('page=2')
+    expect(url).toContain('page_size=10')
+  })
+
+  it('defaults page to 1 and page_size to 50 when not given', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ total: 0, page: 1, page_size: 50, rows: [] }))
+
+    await getReportProducts('scan-1', {
+      commissionPct: '0.10', shippingCost: '15.00', vatPct: '0.23', returnsPct: '0.02',
+    })
+
+    const [url] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toContain('page=1')
+    expect(url).toContain('page_size=50')
   })
 })
