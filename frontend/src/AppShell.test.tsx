@@ -102,7 +102,8 @@ describe('AppShell', () => {
       </AppShell>
     )
 
-    const trigger = screen.getByRole('button', { name: /toggle sidebar/i })
+    const trigger = document.querySelector('[data-slot="sidebar-trigger"]')
+    if (!trigger) throw new Error('sidebar trigger not found')
     await user.click(trigger)
 
     // The trigger toggles the same lifted `open` state hover uses — clicking it once
