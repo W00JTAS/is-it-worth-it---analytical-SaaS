@@ -26,10 +26,11 @@ export function PaginatedList<T>({ items, pageSize, renderItem, emptyState }: Pa
     return emptyState ?? null
   }
 
-  const start = (page - 1) * pageSize
+  const safePage = Math.min(page, pageCount)
+  const start = (safePage - 1) * pageSize
   const pageItems = items.slice(start, start + pageSize)
-  const isFirstPage = page === 1
-  const isLastPage = page === pageCount
+  const isFirstPage = safePage === 1
+  const isLastPage = safePage === pageCount
 
   return (
     <div className="space-y-3">
@@ -54,7 +55,7 @@ export function PaginatedList<T>({ items, pageSize, renderItem, emptyState }: Pa
             </PaginationItem>
             <PaginationItem>
               <span className="px-3 text-sm text-muted-foreground">
-                {page} / {pageCount}
+                {safePage} / {pageCount}
               </span>
             </PaginationItem>
             <PaginationItem>

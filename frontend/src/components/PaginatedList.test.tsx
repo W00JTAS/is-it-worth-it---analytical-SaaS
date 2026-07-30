@@ -76,4 +76,27 @@ describe('PaginatedList', () => {
 
     expect(screen.getByText('Brak wpisów')).toBeInTheDocument()
   })
+
+  it('clamps page to current pageCount to prevent transient blank renders when items shrink', async () => {
+    const user = userEvent.setup()
+    const longList = Array.from({ length: 25 }, (_, i) => `long-${i + 1}`)
+    const shortList = Array.from({ length: 3 }, (_, i) => `short-${i + 1}`)
+    const { rerender } = render(
+      <PaginatedList items={longList} pageSize={10} renderItem={(item) => <span>{item}</span>} />
+    )
+
+    // Navigate to page 2 of the long list
+    await user.click(screen.getByLabelText('Go to next page'))
+    expect(screen.getByText('long-11')).toBeInTheDocument()
+
+    // Rerender with a much shorter list that only has 1 page
+    rerender(<PaginatedList items={shortList} pageSize={10} renderItem={(item) => <span>{item}</span>} />)
+
+    // Should render the short list items, not be blank (safePage clamps to 1)
+    expect(screen.getByText('short-1')).toBeInTheDocument()
+    expect(screen.getByText('short-2')).toBeInTheDocument()
+    expect(screen.getByText('short-3')).toBeInTheDocument()
+    // Should not have pagination (all items fit on one page)
+    expect(screen.queryByRole('navigation', { name: /pagination/i })).not.toBeInTheDocument()
+  })
 })
