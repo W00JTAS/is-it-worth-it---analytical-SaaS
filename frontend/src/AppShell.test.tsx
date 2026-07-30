@@ -1,11 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AppShell } from './AppShell'
-
-afterEach(() => {
-  document.documentElement.classList.remove('dark')
-})
 
 describe('AppShell', () => {
   it('renders all 5 wizard steps with the current one marked active', () => {
@@ -110,5 +106,43 @@ describe('AppShell', () => {
     // from the default collapsed state must expand it.
     const sidebar = document.querySelector('[data-slot="sidebar"]')
     expect(sidebar).toHaveAttribute('data-state', 'expanded')
+  })
+
+  it('clicking the trigger pins the sidebar open — hovering away no longer collapses it', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <AppShell currentStep="upload">
+        <p>content</p>
+      </AppShell>
+    )
+
+    const trigger = document.querySelector('[data-slot="sidebar-trigger"]')
+    const hoverRegion = container.querySelector('[data-slot="sidebar-container"]')
+    const sidebar = container.querySelector('[data-slot="sidebar"]')
+    if (!trigger || !hoverRegion || !sidebar) throw new Error('sidebar elements not found')
+
+    await user.click(trigger)
+    expect(sidebar).toHaveAttribute('data-state', 'expanded')
+
+    await user.unhover(hoverRegion)
+    expect(sidebar).toHaveAttribute('data-state', 'expanded')
+  })
+
+  it('expands on focus and collapses on blur, mirroring hover, when not pinned', async () => {
+    const { container } = render(
+      <AppShell currentStep="upload">
+        <p>content</p>
+      </AppShell>
+    )
+
+    const hoverRegion = container.querySelector('[data-slot="sidebar-container"]')
+    const sidebar = container.querySelector('[data-slot="sidebar"]')
+    if (!hoverRegion || !sidebar) throw new Error('sidebar elements not found')
+
+    fireEvent.focus(hoverRegion)
+    expect(sidebar).toHaveAttribute('data-state', 'expanded')
+
+    fireEvent.blur(hoverRegion)
+    expect(sidebar).toHaveAttribute('data-state', 'collapsed')
   })
 })

@@ -29,15 +29,31 @@ interface AppShellProps {
 export function AppShell({ currentStep, children }: AppShellProps) {
   const { theme, toggleTheme } = useTheme()
   const [open, setOpen] = useState(false)
+  const [pinned, setPinned] = useState(false)
   const currentIndex = WIZARD_STEPS.findIndex((step) => step.id === currentStep)
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next)
+    setPinned(next)
+  }
+
+  const handleExpand = () => {
+    if (!pinned) setOpen(true)
+  }
+
+  const handleCollapse = () => {
+    if (!pinned) setOpen(false)
+  }
 
   return (
     <TooltipProvider>
-      <SidebarProvider open={open} onOpenChange={setOpen}>
+      <SidebarProvider open={open} onOpenChange={handleOpenChange}>
         <Sidebar
           collapsible="icon"
-          onMouseEnter={() => setOpen(true)}
-          onMouseLeave={() => setOpen(false)}
+          onMouseEnter={handleExpand}
+          onMouseLeave={handleCollapse}
+          onFocus={handleExpand}
+          onBlur={handleCollapse}
         >
           <SidebarHeader>
             <span className="px-2 py-1 text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">IS IT WORTH IT</span>
@@ -75,7 +91,7 @@ export function AppShell({ currentStep, children }: AppShellProps) {
           <SidebarRail />
         </Sidebar>
         <SidebarInset>
-          <ScrollArea className="h-svh">
+          <ScrollArea className="flex-1 min-h-0">
             <header className="flex items-center gap-2 p-2 md:hidden">
               <SidebarTrigger />
             </header>
