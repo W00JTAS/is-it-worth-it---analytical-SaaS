@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { AppShell } from './AppShell'
 import { UploadStep } from './steps/UploadStep'
+import { StepErrorBoundary } from './components/StepErrorBoundary'
 import type { ColumnMapping } from './api/types'
 import type { WizardStep } from './wizardSteps'
 
@@ -13,8 +14,10 @@ const ReportStep = lazy(() => import('./steps/ReportStep').then((m) => ({ defaul
 
 function StepFallback() {
   return (
-    <div className="mx-auto max-w-md p-8">
-      <p className="text-sm text-muted-foreground">Ładowanie…</p>
+    <div className="p-8">
+      <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+        Ładowanie…
+      </p>
     </div>
   )
 }
@@ -35,31 +38,33 @@ function App() {
           }}
         />
       )}
-      <Suspense fallback={<StepFallback />}>
-        {step === 'mapping' && file && (
-          <MappingStep
-            file={file}
-            onConfirmed={(mapping) => {
-              setColumnMapping(mapping)
-              setStep('scope')
-            }}
-          />
-        )}
-        {step === 'scope' && file && columnMapping && (
-          <ScopeEstimateStep
-            file={file}
-            columnMapping={columnMapping}
-            onStarted={(id) => {
-              setScanId(id)
-              setStep('progress')
-            }}
-          />
-        )}
-        {step === 'progress' && scanId && (
-          <ProgressStep scanId={scanId} onDone={() => setStep('report')} />
-        )}
-        {step === 'report' && scanId && <ReportStep scanId={scanId} />}
-      </Suspense>
+      <StepErrorBoundary>
+        <Suspense fallback={<StepFallback />}>
+          {step === 'mapping' && file && (
+            <MappingStep
+              file={file}
+              onConfirmed={(mapping) => {
+                setColumnMapping(mapping)
+                setStep('scope')
+              }}
+            />
+          )}
+          {step === 'scope' && file && columnMapping && (
+            <ScopeEstimateStep
+              file={file}
+              columnMapping={columnMapping}
+              onStarted={(id) => {
+                setScanId(id)
+                setStep('progress')
+              }}
+            />
+          )}
+          {step === 'progress' && scanId && (
+            <ProgressStep scanId={scanId} onDone={() => setStep('report')} />
+          )}
+          {step === 'report' && scanId && <ReportStep scanId={scanId} />}
+        </Suspense>
+      </StepErrorBoundary>
     </AppShell>
   )
 }

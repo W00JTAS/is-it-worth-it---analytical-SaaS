@@ -82,6 +82,26 @@ describe('ProgressStep', () => {
     expect(progressIndicator?.className).toContain('bg-destructive')
   })
 
+  it('keeps the failed-state progress bar visibly non-empty even when the scan died before any product completed', () => {
+    mockScanEvents({
+      scan: {
+        scan_id: 'scan-1', status: 'failed', scope_type: 'full',
+        total_products: 20, completed_products: 0,
+        estimate: {
+          queries_without_refresh: 20, queries_with_refresh: 20,
+          cost_usd_without_refresh: '0.20', cost_usd_with_refresh: '0.20',
+          seconds_without_refresh: 10, seconds_with_refresh: 10,
+        },
+        overlapping_count: 0, stale_count: 0,
+      },
+    })
+
+    render(<ProgressStep scanId="scan-1" onDone={vi.fn()} />)
+
+    const progressIndicator = document.querySelector('[data-slot="progress-indicator"]') as HTMLElement
+    expect(progressIndicator.style.transform).not.toBe('translateX(-100%)')
+  })
+
   it('shows a polling indicator when the source falls back to polling', () => {
     mockScanEvents({
       source: 'polling',

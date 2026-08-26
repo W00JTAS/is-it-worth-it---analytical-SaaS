@@ -79,6 +79,9 @@ export function AppShell({ currentStep, children }: AppShellProps) {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter>
+            {/* No `hidden={state !== "collapsed"}` here unlike SidebarMenuButton's tooltip: this
+                button is icon-only in both sidebar states (no label span appears when expanded),
+                so the tooltip stays the only visible affordance and must not be suppressed. */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

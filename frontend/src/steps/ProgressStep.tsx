@@ -30,12 +30,16 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
     ? Math.min(100, Math.round((scan.completed_products / scan.total_products) * 100))
     : 0
   const isTerminal = scan.status === 'done' || scan.status === 'failed'
+  // A failed scan can die before its first product completes (percent === 0), which would
+  // translate the indicator fully out of the track and hide the red color entirely — floor it
+  // so the failure is always visible, not just implied by 0/N text.
+  const displayPercent = scan.status === 'failed' ? Math.max(percent, 4) : percent
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 p-8">
       <h1 className="text-xl font-semibold text-foreground">Przebieg skanu</h1>
       <Progress
-        value={percent}
+        value={displayPercent}
         aria-label="Postęp skanu"
         indicatorClassName={scan.status === 'failed' ? 'bg-destructive' : undefined}
       />
