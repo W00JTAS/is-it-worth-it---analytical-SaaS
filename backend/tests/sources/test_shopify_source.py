@@ -1,7 +1,10 @@
 from decimal import Decimal
 
+import httpx
+import pytest
+
 from app.sources.base import CatalogSource
-from app.sources.shopify_source import ShopifyCatalogSource
+from app.sources.shopify_source import ShopifyCatalogSource, ShopifyApiError
 
 
 class _FakeResponse:
@@ -253,3 +256,50 @@ def test_paginates_across_multiple_pages():
     assert len(client.requests) == 3
     assert client.requests[1]["json"]["variables"]["cursor"] is None
     assert client.requests[2]["json"]["variables"]["cursor"] == "cursor-1"
+
+
+class _RaisingStatusClient:
+    """Simulates a non-2xx HTTP response: raise_for_status() raises."""
+
+    def post(self, url, headers, json):
+        request = httpx.Request("POST", url)
+        response = httpx.Response(status_code=401, request=request)
+        error = httpx.HTTPStatusError("unauthorized", request=request, response=response)
+
+        class _Resp:
+            def raise_for_status(self) -> None:
+                raise error
+
+            def json(self) -> dict:
+                raise AssertionError("json() should not be called when raise_for_status() raises")
+
+        return _Resp()
+
+
+class _GraphQlErrorClient:
+    def post(self, url, headers, json):
+        return _FakeResponse({"errors": [{"message": "Access denied for currencyCode field."}]})
+
+
+def test_raises_shopify_api_error_on_non_200_response():
+    source = ShopifyCatalogSource(
+        shop_domain="test-shop.myshopify.com",
+        access_token="bad-token",
+        tenant_id="t1",
+        client=_RaisingStatusClient(),
+    )
+
+    with pytest.raises(ShopifyApiError):
+        source.fetch_products()
+
+
+def test_raises_shopify_api_error_on_graphql_errors_array():
+    source = ShopifyCatalogSource(
+        shop_domain="test-shop.myshopify.com",
+        access_token="token",
+        tenant_id="t1",
+        client=_GraphQlErrorClient(),
+    )
+
+    with pytest.raises(ShopifyApiError, match="Access denied"):
+        source.fetch_products()

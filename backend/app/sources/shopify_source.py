@@ -12,6 +12,10 @@ DEFAULT_API_VERSION = "2026-07"
 
 CURRENCY_QUERY = "{ shop { currencyCode } }"
 
+
+class ShopifyApiError(Exception):
+    pass
+
 PRODUCTS_QUERY = """
 query($cursor: String) {
   products(first: 50, after: $cursor) {
@@ -71,13 +75,21 @@ class ShopifyCatalogSource:
         }
 
     def _post(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
-        response = self._client.post(
-            self._url,
-            headers=self._headers,
-            json={"query": query, "variables": variables or {}},
-        )
-        response.raise_for_status()
-        body = response.json()
+        try:
+            response = self._client.post(
+                self._url,
+                headers=self._headers,
+                json={"query": query, "variables": variables or {}},
+            )
+            response.raise_for_status()
+            body = response.json()
+        except httpx.HTTPError as exc:
+            raise ShopifyApiError(f"Shopify request failed: {exc}") from exc
+
+        if "errors" in body:
+            messages = "; ".join(e.get("message", str(e)) for e in body["errors"])
+            raise ShopifyApiError(f"Shopify GraphQL error: {messages}")
+
         return body["data"]
 
     def fetch_products(self) -> list[Product]:
