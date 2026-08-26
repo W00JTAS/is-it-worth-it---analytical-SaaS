@@ -145,7 +145,9 @@ decyzja o modelu rozliczeń zapada przy pracach nad integracją, nie teraz.
 
 **Skille (`.claude/skills/`)**
 - `add-price-provider` — krok po kroku dodanie nowego źródła cen (np. Allegro) zgodnie z kontraktem
-- `add-catalog-source` — dodanie nowego źródła produktów (WooCommerce, kolejna platforma)
+- `add-catalog-source` — dodanie nowego źródła produktów (WooCommerce, kolejna platforma). Design:
+  `2026-08-26-catalog-source-base-class-design.md` (wspólna warstwa normalizacji `BaseCatalogSource`
+  + sam skill, zanim powstanie trzecie źródło).
 - `cost-safety` — jak testować ścieżki LLM **bez** palenia realnych tokenów (mocki, nagrane odpowiedzi)
 
 **Subagenty (`.claude/agents/`)**
