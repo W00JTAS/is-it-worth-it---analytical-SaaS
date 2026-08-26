@@ -205,3 +205,51 @@ def test_clears_invalid_barcode_checksum():
 
     assert products[0].ean is None
     assert any("invalid EAN checksum" in w for w in source.warnings)
+
+
+def test_paginates_across_multiple_pages():
+    def _page(product_id: str, variant_id: str, has_next: bool, cursor: str | None) -> dict:
+        return {
+            "edges": [
+                {
+                    "node": {
+                        "id": product_id,
+                        "title": f"Produkt {product_id}",
+                        "productType": "Ogólne",
+                        "variants": {
+                            "edges": [
+                                {
+                                    "node": {
+                                        "id": variant_id,
+                                        "title": "Default Title",
+                                        "price": "10.00",
+                                        "barcode": None,
+                                    }
+                                }
+                            ]
+                        },
+                    }
+                }
+            ],
+            "pageInfo": {"hasNextPage": has_next, "endCursor": cursor},
+        }
+
+    client = _FakeClient(
+        currency="PLN",
+        pages=[
+            _page("gid://shopify/Product/1", "gid://shopify/ProductVariant/10", True, "cursor-1"),
+            _page("gid://shopify/Product/2", "gid://shopify/ProductVariant/20", False, None),
+        ],
+    )
+    source = _make_source(client)
+
+    products = source.fetch_products()
+
+    assert [p.external_id for p in products] == [
+        "gid://shopify/Product/1",
+        "gid://shopify/Product/2",
+    ]
+    # 1 currency call + 2 page calls
+    assert len(client.requests) == 3
+    assert client.requests[1]["json"]["variables"]["cursor"] is None
+    assert client.requests[2]["json"]["variables"]["cursor"] == "cursor-1"

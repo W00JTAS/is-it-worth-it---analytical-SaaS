@@ -83,10 +83,17 @@ class ShopifyCatalogSource:
     def fetch_products(self) -> list[Product]:
         currency = self._post(CURRENCY_QUERY)["shop"]["currencyCode"]
 
-        data = self._post(PRODUCTS_QUERY, {"cursor": None})["products"]
         products: list[Product] = []
-        for edge in data["edges"]:
-            products.extend(self._map_product(edge["node"], currency))
+        cursor: str | None = None
+        while True:
+            data = self._post(PRODUCTS_QUERY, {"cursor": cursor})["products"]
+            for edge in data["edges"]:
+                products.extend(self._map_product(edge["node"], currency))
+
+            page_info = data["pageInfo"]
+            if not page_info["hasNextPage"]:
+                break
+            cursor = page_info["endCursor"]
 
         return products
 
