@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PaginatedList } from '@/components/PaginatedList'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface ScopeEstimateStepProps {
   file: File
@@ -227,12 +228,10 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
           )}
           {result.stale_count > 0 && (
             <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={forceRefreshStale}
-                onChange={(e) => setForceRefreshStale(e.target.checked)}
+                onCheckedChange={(checked) => setForceRefreshStale(checked === true)}
                 disabled={fieldsDisabled}
-                className="accent-primary"
               />
               Odśwież nieświeże ({result.stale_count} {pluralizeProdukt(result.stale_count)} z nich nie
               sprawdzano od dawna)

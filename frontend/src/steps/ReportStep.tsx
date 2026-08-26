@@ -5,6 +5,7 @@ import type { CostConfigInput, ProductRow, ReportSummary, ProductPage } from '..
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SELECT_CLASS } from '@/components/ui/selectClass'
+import { cn } from '@/lib/utils'
 import {
   Table,
   TableBody,
@@ -443,7 +444,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
               <select
                 value={category}
                 onChange={(e) => handleCategoryChange(e.target.value)}
-                className={SELECT_CLASS}
+                className={cn(SELECT_CLASS, 'w-auto')}
               >
                 <option value="">Wszystkie</option>
                 {Array.from(new Set(summary?.category_table.map((r) => r.category) ?? [])).map((c) => (
@@ -456,7 +457,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
               <select
                 value={status}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className={SELECT_CLASS}
+                className={cn(SELECT_CLASS, 'w-auto')}
               >
                 <option value="">Wszystkie</option>
                 <option value="computable">Policzone</option>
@@ -471,7 +472,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
               <select
                 value={sort}
                 onChange={(e) => handleSortChange(e.target.value)}
-                className={SELECT_CLASS}
+                className={cn(SELECT_CLASS, 'w-auto')}
               >
                 <option value="category">Kategoria</option>
                 <option value="name">Nazwa</option>

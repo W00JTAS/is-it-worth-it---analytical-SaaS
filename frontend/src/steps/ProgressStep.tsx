@@ -34,7 +34,11 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 p-8">
       <h1 className="text-xl font-semibold text-foreground">Przebieg skanu</h1>
-      <Progress value={percent} aria-label="Postęp skanu" />
+      <Progress
+        value={percent}
+        aria-label="Postęp skanu"
+        indicatorClassName={scan.status === 'failed' ? 'bg-destructive' : undefined}
+      />
       <p className="text-sm text-muted-foreground">
         {scan.completed_products} / {scan.total_products}
       </p>

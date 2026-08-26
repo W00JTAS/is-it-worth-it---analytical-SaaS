@@ -77,6 +77,9 @@ describe('ProgressStep', () => {
     expect(failedMessage).toBeInTheDocument()
     expect(failedMessage.className).toContain('text-destructive')
     expect(failedMessage.className).not.toContain('text-success')
+
+    const progressIndicator = document.querySelector('[data-slot="progress-indicator"]')
+    expect(progressIndicator?.className).toContain('bg-destructive')
   })
 
   it('shows a polling indicator when the source falls back to polling', () => {

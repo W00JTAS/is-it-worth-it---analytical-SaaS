@@ -17,7 +17,7 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
-import { TooltipProvider } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTheme } from './theme/useTheme'
 import { WIZARD_STEPS, type WizardStep } from './wizardSteps'
 
@@ -79,14 +79,21 @@ export function AppShell({ currentStep, children }: AppShellProps) {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={theme === 'dark' ? 'Przełącz na jasny motyw' : 'Przełącz na ciemny motyw'}
-              onClick={toggleTheme}
-            >
-              {theme === 'dark' ? <Sun /> : <Moon />}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={theme === 'dark' ? 'Przełącz na jasny motyw' : 'Przełącz na ciemny motyw'}
+                  onClick={toggleTheme}
+                >
+                  {theme === 'dark' ? <Sun /> : <Moon />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" align="center">
+                {theme === 'dark' ? 'Przełącz na jasny motyw' : 'Przełącz na ciemny motyw'}
+              </TooltipContent>
+            </Tooltip>
           </SidebarFooter>
           <SidebarRail />
         </Sidebar>
