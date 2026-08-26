@@ -166,7 +166,8 @@ Faza po fazie szczegóły — patrz odpowiadający plan implementacyjny (writing
 4. Job engine (async, wznawialny, streaming postępu)
 5. Frontend (pełny przepływ ekranów + raport)
 6. Szkic `ShopifySource` (weryfikacja abstrakcji, bez OAuth/hostingu)
-7. Meta — spisanie reguł/skilli/subagentów z sekcji wyżej
+7. Meta — spisanie reguł/skilli/subagentów z sekcji wyżej. Zrobione:
+   `2026-08-26-phase-7-meta-writeup.md` (plan vs. faktyczny stan, z uzasadnieniem rozbieżności).
 
 ## Weryfikacja końcowa
 
