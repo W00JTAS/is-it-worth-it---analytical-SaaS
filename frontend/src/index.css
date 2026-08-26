@@ -31,9 +31,18 @@
   --destructive-foreground: #f5f5f5;
   --border: #e5e5e5;
   --input: #e5e5e5;
-  --ring: #a1a1a1;
+  --ring: #757575;
+  /* Darkened from #a1a1a1 (2026-08-26): the solid focus ring (border-ring) was 2.58:1 on
+     --background, below the 3:1 WCAG 1.4.11 non-text-contrast floor for a focus indicator.
+     #757575 clears 4.61:1 solid. The translucent ring-ring/50 glow that renders alongside the
+     solid border still can't independently clear 3:1 at any reasonable grey (even near-black
+     only reaches ~2.5:1 at 50% alpha over white) — the solid border is the compliance-bearing
+     part of the indicator; the glow stays as a decorative addition, not the sole visual cue. */
 
-  --success: #0d8f4f;
+  --success: #0b8449;
+  /* Darkened from #0d8f4f (2026-08-26): 4.15:1 on --background, below AA (4.5:1) for
+     ProgressStep's 14px "scan succeeded" message. #0b8449 clears 4.76:1 on --background
+     and only improves the already-passing text-success/bg-card use (5.83:1 -> 6.44:1). */
   /* Darkened from #a3760a (2026-08-26): the original was 3.74:1 on --muted, below AA
      (4.5:1) for the 12px warning chips ReportStep introduced. #8a6408 clears 4.93:1 on
      --muted and 5.37:1 on --card, and only improves the already-passing text-warning
