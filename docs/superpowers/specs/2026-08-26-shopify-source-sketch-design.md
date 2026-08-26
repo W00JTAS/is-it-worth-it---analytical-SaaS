@@ -100,14 +100,25 @@ specifically to anticipate multi-variant sources that CSV never had:
 | `name` | `product.title` if variant `title == "Default Title"`, else `f"{product.title} - {variant.title}"` | needed once a product has real variants (size/color) — otherwise two rows would read identically in a report |
 | `wholesale_price` | variant `price` (string) → `normalize.money.parse_price()` | the shop's listed price stands in for a supplier's wholesale cost — reusing the existing parser proves it's format-agnostic, not CSV-specific |
 | `currency` | shop's `currencyCode`, queried once and reused for every product | |
-| `ean` | variant `barcode` → `normalize.ean.is_valid_ean()` | invalid or missing barcode → `ean=None` + a warning, mirroring `CsvCatalogSource`'s handling |
+| `ean` | variant `barcode`, padded from 12→13 digits (UPC-A) → `normalize.ean.is_valid_ean()` | invalid checksum → `ean=None` + a warning; a genuinely absent barcode → `ean=None` with **no** warning — both mirroring `CsvCatalogSource`'s handling exactly (corrected after the whole-branch review: an earlier draft of this doc said "invalid or missing barcode → a warning", which was wrong) |
 | `category` | `product.productType`, or `"Bez kategorii"` if blank | matches the CSV source's existing fallback string exactly |
 
 Skip rules mirror `CsvCatalogSource`: a variant with a missing/unparseable price, or a zero price,
-is skipped with a warning appended to `self.warnings` (same `list[str]` convention). No EAN
-deduplication logic is being ported over for this sketch — that was a CSV-specific reality (the
-same product listed twice in a supplier's spreadsheet); a Shopify catalog doesn't have that failure
-mode since each variant is already a unique row from the store's own database.
+is skipped with a warning appended to `self.warnings` (same `list[str]` convention).
+
+**Correction after the whole-branch review:** an earlier draft of this doc argued EAN dedup wasn't
+needed for Shopify because "each variant is already a unique row from the store's own database."
+That conflated row uniqueness with EAN uniqueness — a barcode identifies a *product*, and merchants
+routinely reuse one barcode across several size/color variants of it, which a real Shopify catalog
+does produce. `backend/app/scans/models.py` documents that downstream staleness/cost-estimate logic
+depends on a source's product list being EAN-unique, so `ShopifyCatalogSource` **does** port
+`CsvCatalogSource`'s dedup logic (keep the cheaper-priced product on a shared EAN, warn either way)
+— this is exactly the kind of behavior this phase's sketch was meant to surface: normalization
+guarantees that lived only in `CsvCatalogSource`, not in the `CatalogSource` Protocol or a shared
+helper, and that a second implementation could silently violate. The Protocol's *signature*
+(`fetch_products() -> Iterable[Product]`) needed no change, but the finding argues for a shared
+normalization layer before a third source exists, so these guarantees stop being reimplemented
+per-source.
 
 ## Error handling
 
