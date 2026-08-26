@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 import httpx
@@ -302,4 +303,235 @@ def test_raises_shopify_api_error_on_graphql_errors_array():
     )
 
     with pytest.raises(ShopifyApiError, match="Access denied"):
+        source.fetch_products()
+
+
+def test_dedups_same_ean_across_variants_keeping_cheaper_price():
+    client = _FakeClient(
+        currency="PLN",
+        pages=[
+            _single_product_page(
+                {
+                    "id": "gid://shopify/Product/5",
+                    "title": "Kubek",
+                    "productType": "Kuchnia",
+                    "variants": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": "gid://shopify/ProductVariant/50",
+                                    "title": "S",
+                                    "price": "49.99",
+                                    "barcode": "5901234123457",
+                                }
+                            },
+                            {
+                                "node": {
+                                    "id": "gid://shopify/ProductVariant/51",
+                                    "title": "M",
+                                    "price": "39.99",
+                                    "barcode": "5901234123457",
+                                }
+                            },
+                        ]
+                    },
+                }
+            )
+        ],
+    )
+    source = _make_source(client)
+
+    products = source.fetch_products()
+
+    assert len(products) == 1
+    assert products[0].wholesale_price == Decimal("39.99")
+    assert products[0].variant_id == "gid://shopify/ProductVariant/51"
+    assert any("duplicate EAN" in w for w in source.warnings)
+
+
+def test_pads_upc_a_barcode_to_ean_13():
+    client = _FakeClient(
+        currency="PLN",
+        pages=[
+            _single_product_page(
+                {
+                    "id": "gid://shopify/Product/6",
+                    "title": "Guma do żucia",
+                    "productType": "Spożywcze",
+                    "variants": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": "gid://shopify/ProductVariant/60",
+                                    "title": "Default Title",
+                                    "price": "5.00",
+                                    "barcode": "036000291452",
+                                }
+                            }
+                        ]
+                    },
+                }
+            )
+        ],
+    )
+    source = _make_source(client)
+
+    products = source.fetch_products()
+
+    assert products[0].ean == "0036000291452"
+    assert not any("invalid EAN checksum" in w for w in source.warnings)
+
+
+def test_skips_product_with_blank_title():
+    client = _FakeClient(
+        currency="PLN",
+        pages=[
+            _single_product_page(
+                {
+                    "id": "gid://shopify/Product/7",
+                    "title": "   ",
+                    "productType": "Ogólne",
+                    "variants": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": "gid://shopify/ProductVariant/70",
+                                    "title": "Default Title",
+                                    "price": "10.00",
+                                    "barcode": None,
+                                }
+                            }
+                        ]
+                    },
+                }
+            )
+        ],
+    )
+    source = _make_source(client)
+
+    products = source.fetch_products()
+
+    assert products == []
+    assert any("missing title" in w for w in source.warnings)
+
+
+def test_strips_whitespace_only_product_type_before_fallback():
+    client = _FakeClient(
+        currency="PLN",
+        pages=[
+            _single_product_page(
+                {
+                    "id": "gid://shopify/Product/8",
+                    "title": "Notes",
+                    "productType": "   ",
+                    "variants": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": "gid://shopify/ProductVariant/80",
+                                    "title": "Default Title",
+                                    "price": "10.00",
+                                    "barcode": None,
+                                }
+                            }
+                        ]
+                    },
+                }
+            )
+        ],
+    )
+    source = _make_source(client)
+
+    products = source.fetch_products()
+
+    assert products[0].category == "Bez kategorii"
+
+
+def test_raises_on_pagination_cursor_not_advancing():
+    def _page(has_next: bool, cursor: str | None) -> dict:
+        return {
+            "edges": [
+                {
+                    "node": {
+                        "id": "gid://shopify/Product/9",
+                        "title": "Produkt",
+                        "productType": "Ogólne",
+                        "variants": {
+                            "edges": [
+                                {
+                                    "node": {
+                                        "id": "gid://shopify/ProductVariant/90",
+                                        "title": "Default Title",
+                                        "price": "10.00",
+                                        "barcode": None,
+                                    }
+                                }
+                            ]
+                        },
+                    }
+                }
+            ],
+            "pageInfo": {"hasNextPage": has_next, "endCursor": cursor},
+        }
+
+    # First page legitimately advances the cursor to "cursor-1"; the second
+    # page claims there is still more (hasNextPage: true) but repeats the
+    # same endCursor — this must not loop forever.
+    client = _FakeClient(
+        currency="PLN",
+        pages=[
+            _page(True, "cursor-1"),
+            _page(True, "cursor-1"),
+        ],
+    )
+    source = _make_source(client)
+
+    with pytest.raises(ShopifyApiError, match="did not advance"):
+        source.fetch_products()
+
+
+class _JsonDecodeErrorClient:
+    """Simulates a 200 response whose body isn't valid JSON (e.g. an HTML
+    error page)."""
+
+    def post(self, *args, **kwargs):
+        class _Resp:
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> dict:
+                raise json.JSONDecodeError("Expecting value", "<html>", 0)
+
+        return _Resp()
+
+
+def test_raises_shopify_api_error_on_non_json_response():
+    source = ShopifyCatalogSource(
+        shop_domain="test-shop.myshopify.com",
+        access_token="token",
+        tenant_id="t1",
+        client=_JsonDecodeErrorClient(),
+    )
+
+    with pytest.raises(ShopifyApiError):
+        source.fetch_products()
+
+
+class _MalformedErrorsShapeClient:
+    """Simulates a GraphQL response where `errors` is present but not the
+    expected list-of-dicts shape."""
+
+    def post(self, url, headers, json):
+        return _FakeResponse({"errors": "not a list"})
+
+
+def test_raises_shopify_api_error_on_malformed_errors_shape():
+    source = ShopifyCatalogSource(
+        shop_domain="test-shop.myshopify.com",
+        access_token="token",
+        tenant_id="t1",
+        client=_MalformedErrorsShapeClient(),
+    )
+
+    with pytest.raises(ShopifyApiError):
         source.fetch_products()
