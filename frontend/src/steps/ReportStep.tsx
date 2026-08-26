@@ -2,6 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { getReportProducts, getReportSummary } from '../api/client'
 import { ApiError } from '../api/types'
 import type { CostConfigInput, ProductRow, ReportSummary, ProductPage } from '../api/types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { SELECT_CLASS } from '@/components/ui/selectClass'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 const STORAGE_KEY = 'isItWorthIt.costConfig'
 
@@ -54,11 +65,11 @@ export function formatPct(value: string | null): string {
 
 function ProductDetail({ row }: { row: ProductRow }) {
   return (
-    <div className="flex flex-col gap-2 rounded-xl bg-slate-900/60 p-4 text-sm text-slate-300">
+    <div className="flex flex-col gap-2 rounded-lg bg-muted p-4 text-sm text-muted-foreground">
       {row.offer ? (
         <>
           <p>
-            Sprzedawca: <span className="text-slate-100">{row.offer.seller}</span>
+            Sprzedawca: <span className="text-foreground">{row.offer.seller}</span>
           </p>
           <p>
             Źródło:{' '}
@@ -66,7 +77,7 @@ function ProductDetail({ row }: { row: ProductRow }) {
               href={row.offer.source_url}
               target="_blank"
               rel="noreferrer"
-              className="text-emerald-400 underline"
+              className="text-foreground underline underline-offset-4"
             >
               {row.offer.source_url}
             </a>
@@ -77,11 +88,12 @@ function ProductDetail({ row }: { row: ProductRow }) {
       ) : (
         <p>Brak znalezionej oferty.</p>
       )}
-      {row.anomaly_flag && <p className="text-amber-400">Flaga: {row.anomaly_flag}</p>}
+      {row.anomaly_flag && <p className="text-warning">Flaga: {row.anomaly_flag}</p>}
       {row.margin_matrix && (
+        // native table: nested inside a bg-muted panel, shadcn Table's hover/overflow chrome would be noise here
         <table className="mt-2 w-full text-xs">
           <thead>
-            <tr className="text-left text-slate-500">
+            <tr className="text-left text-muted-foreground">
               <th className="font-normal">Scenariusz</th>
               <th className="text-right font-normal">Marża %</th>
               <th className="text-right font-normal">Cena sprzedaży</th>
@@ -111,19 +123,20 @@ function ProductRowCard({
 }) {
   const margin = marginAtZero(row)
   return (
-    <div className="rounded-xl border border-slate-800/60">
+    <div className="rounded-lg border border-border">
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={expanded}
         className="grid w-full grid-cols-1 gap-1 p-4 text-left md:grid-cols-[1fr_140px_100px_140px] md:items-center md:gap-4"
       >
-        <span className="text-sm font-medium text-slate-100">{row.name}</span>
-        <span className="text-xs text-slate-400 md:text-sm">{row.category}</span>
-        <span className="text-sm tabular-nums text-slate-300 md:text-right">{formatPct(margin)}</span>
-        <span className="text-xs text-slate-400 md:text-sm">{statusLabel(row)}</span>
+        <span className="text-sm font-medium text-foreground">{row.name}</span>
+        <span className="text-xs text-muted-foreground md:text-sm">{row.category}</span>
+        <span className="text-sm tabular-nums text-foreground md:text-right">{formatPct(margin)}</span>
+        <span className="text-xs text-muted-foreground md:text-sm">{statusLabel(row)}</span>
       </button>
       {expanded && (
-        <div className="border-t border-slate-800/60 p-4">
+        <div className="border-t border-border p-4">
           <ProductDetail row={row} />
         </div>
       )}
@@ -255,21 +268,23 @@ export function ReportStep({ scanId }: ReportStepProps) {
   const verdictPositive = verdictValue !== null && Number(verdictValue) > 0
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-16 p-8">
+    <div className="mx-auto flex max-w-3xl flex-col gap-12 p-8">
+      <h1 className="text-xl font-semibold text-foreground">Raport</h1>
+
       <section className="flex flex-col items-center gap-2 text-center">
         {isLoading ? (
-          <p className="text-2xl font-medium text-slate-400">Liczenie…</p>
+          <p className="text-2xl font-medium text-muted-foreground">Liczenie…</p>
         ) : verdictValue !== null ? (
           <>
             <p
               className={`text-6xl font-semibold tabular-nums ${
-                verdictPositive ? 'text-emerald-400' : 'text-rose-400'
+                verdictPositive ? 'text-success' : 'text-destructive'
               }`}
             >
               {verdictPositive ? '+' : ''}
               {formatPct(verdictValue)}
             </p>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-muted-foreground">
               {referenceScenario?.profitable_count ?? 0} / {summary?.counts.computable ?? 0}{' '}
               produktów rentownych przy cenie rynkowej
             </p>
@@ -280,87 +295,82 @@ export function ReportStep({ scanId }: ReportStepProps) {
           // error/loading is in progress) — never while loading or after a
           // failed request, so this text no longer contradicts the error
           // message or flashes during every load.
-          <p className="text-2xl font-medium text-slate-400">Brak danych do policzenia</p>
+          <p className="text-2xl font-medium text-muted-foreground">Brak danych do policzenia</p>
         )}
       </section>
 
       <section className="flex flex-col gap-4">
-        <div className="divide-y divide-slate-800/60 rounded-2xl border border-slate-800 bg-slate-900/40">
-          <label className="flex items-center justify-between gap-4 p-4 text-sm text-slate-300">
+        <div className="divide-y divide-border rounded-lg border border-border bg-card">
+          <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
             Prowizja
-            <input
+            <Input
               type="number"
               step="0.01"
               min={0}
               value={costConfig.commissionPct}
               onChange={(e) => setCostConfig({ ...costConfig, commissionPct: e.target.value })}
-              className="w-28 rounded-lg border border-slate-700 bg-slate-950 p-2 text-right text-slate-100"
+              className="w-28 text-right"
             />
           </label>
-          <label className="flex items-center justify-between gap-4 p-4 text-sm text-slate-300">
+          <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
             Wysyłka
-            <input
+            <Input
               type="number"
               step="0.01"
               min={0}
               value={costConfig.shippingCost}
               onChange={(e) => setCostConfig({ ...costConfig, shippingCost: e.target.value })}
-              className="w-28 rounded-lg border border-slate-700 bg-slate-950 p-2 text-right text-slate-100"
+              className="w-28 text-right"
             />
           </label>
-          <label className="flex items-center justify-between gap-4 p-4 text-sm text-slate-300">
+          <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
             VAT
-            <input
+            <Input
               type="number"
               step="0.01"
               min={0}
               value={costConfig.vatPct}
               onChange={(e) => setCostConfig({ ...costConfig, vatPct: e.target.value })}
-              className="w-28 rounded-lg border border-slate-700 bg-slate-950 p-2 text-right text-slate-100"
+              className="w-28 text-right"
             />
           </label>
-          <label className="flex items-center justify-between gap-4 p-4 text-sm text-slate-300">
+          <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
             Zwroty
-            <input
+            <Input
               type="number"
               step="0.01"
               min={0}
               value={costConfig.returnsPct}
               onChange={(e) => setCostConfig({ ...costConfig, returnsPct: e.target.value })}
-              className="w-28 rounded-lg border border-slate-700 bg-slate-950 p-2 text-right text-slate-100"
+              className="w-28 text-right"
             />
           </label>
         </div>
-        <button
-          type="button"
-          onClick={recalculate}
-          disabled={isLoading}
-          className="self-start rounded-md bg-emerald-600 px-4 py-2 font-medium text-slate-950 disabled:bg-slate-700 disabled:text-slate-400"
-        >
+        <Button type="button" onClick={recalculate} disabled={isLoading} className="self-start">
           Przelicz
-        </button>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        </Button>
+        {error && <p className="text-sm text-destructive">{error}</p>}
       </section>
 
       {summary && (
         <section className="flex flex-wrap gap-2">
           {summary.counts.no_offer > 0 && (
-            <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-amber-400">
+            <span className="rounded-md bg-muted px-3 py-1 text-xs text-warning">
               {summary.counts.no_offer} bez oferty
             </span>
           )}
           {summary.counts.anomaly > 0 && (
-            <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-amber-400">
+            <span className="rounded-md bg-muted px-3 py-1 text-xs text-warning">
               {summary.counts.anomaly} oflagowanych
             </span>
           )}
           {summary.counts.currency_mismatch > 0 && (
-            <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-amber-400">
+            <span className="rounded-md bg-muted px-3 py-1 text-xs text-warning">
               {summary.counts.currency_mismatch} innej waluty
             </span>
           )}
           {summary.counts.not_checked > 0 && (
-            <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-amber-400">
+            <span className="rounded-md bg-muted px-3 py-1 text-xs text-warning">
               {summary.counts.not_checked} nie sprawdzono
             </span>
           )}
@@ -372,22 +382,22 @@ export function ReportStep({ scanId }: ReportStepProps) {
           {summary.scenario_matrix.map((row) => {
             const positive = row.avg_margin_pct !== null && Number(row.avg_margin_pct) > 0
             return (
-              <div key={row.scenario_pct} className="rounded-2xl border border-slate-800 p-6">
-                <p className="text-xs uppercase tracking-wide text-slate-500">
+              <div key={row.scenario_pct} className="rounded-lg border border-border bg-card p-6">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
                   {formatPct(row.scenario_pct)}
                 </p>
                 <p
                   className={`text-3xl font-semibold tabular-nums ${
                     row.avg_margin_pct === null
-                      ? 'text-slate-500'
+                      ? 'text-muted-foreground'
                       : positive
-                        ? 'text-emerald-400'
-                        : 'text-rose-400'
+                        ? 'text-success'
+                        : 'text-destructive'
                   }`}
                 >
                   {formatPct(row.avg_margin_pct)}
                 </p>
-                <p className="text-xs text-slate-500">{row.profitable_count} rentownych</p>
+                <p className="text-xs text-muted-foreground">{row.profitable_count} rentownych</p>
               </div>
             )
           })}
@@ -396,44 +406,44 @@ export function ReportStep({ scanId }: ReportStepProps) {
 
       {summary && summary.category_table.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium text-slate-400">Kategorie</h2>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-800/60 text-left text-slate-500">
-                <th className="py-2 font-normal">Kategoria</th>
-                <th className="py-2 text-right font-normal">Policzone</th>
-                <th className="py-2 text-right font-normal">Wykluczone</th>
-                <th className="py-2 text-right font-normal">Śr. marża</th>
-              </tr>
-            </thead>
-            <tbody>
+          <h2 className="text-sm font-medium text-muted-foreground">Kategorie</h2>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="font-normal text-muted-foreground">Kategoria</TableHead>
+                <TableHead className="text-right font-normal text-muted-foreground">Policzone</TableHead>
+                <TableHead className="text-right font-normal text-muted-foreground">Wykluczone</TableHead>
+                <TableHead className="text-right font-normal text-muted-foreground">Śr. marża</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {summary.category_table.map((row) => (
-                <tr key={row.category} className="border-b border-slate-800/60">
-                  <td className="py-2 text-slate-200">{row.category}</td>
-                  <td className="py-2 text-right tabular-nums text-slate-300">{row.computable_count}</td>
-                  <td className="py-2 text-right tabular-nums text-slate-300">{row.excluded_count}</td>
-                  <td className="py-2 text-right tabular-nums text-slate-300">
+                <TableRow key={row.category}>
+                  <TableCell className="whitespace-normal text-foreground">{row.category}</TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">{row.computable_count}</TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">{row.excluded_count}</TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
                     {formatPct(row.avg_margin_pct)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </section>
       )}
 
-      {productsError && !productPage && <p className="text-sm text-red-400">{productsError}</p>}
+      {productsError && !productPage && <p className="text-sm text-destructive">{productsError}</p>}
 
       {productPage && (
         <section className="flex flex-col gap-4">
-          <h2 className="text-sm font-medium text-slate-400">Produkty</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">Produkty</h2>
           <div className="flex flex-wrap gap-3 text-sm">
-            <label className="flex items-center gap-2 text-slate-300">
+            <label className="flex items-center gap-2 text-muted-foreground">
               Kategoria
               <select
                 value={category}
                 onChange={(e) => handleCategoryChange(e.target.value)}
-                className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
+                className={SELECT_CLASS}
               >
                 <option value="">Wszystkie</option>
                 {Array.from(new Set(summary?.category_table.map((r) => r.category) ?? [])).map((c) => (
@@ -441,12 +451,12 @@ export function ReportStep({ scanId }: ReportStepProps) {
                 ))}
               </select>
             </label>
-            <label className="flex items-center gap-2 text-slate-300">
+            <label className="flex items-center gap-2 text-muted-foreground">
               Status
               <select
                 value={status}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
+                className={SELECT_CLASS}
               >
                 <option value="">Wszystkie</option>
                 <option value="computable">Policzone</option>
@@ -456,12 +466,12 @@ export function ReportStep({ scanId }: ReportStepProps) {
                 <option value="not_checked">Nie sprawdzono</option>
               </select>
             </label>
-            <label className="flex items-center gap-2 text-slate-300">
+            <label className="flex items-center gap-2 text-muted-foreground">
               Sortowanie
               <select
                 value={sort}
                 onChange={(e) => handleSortChange(e.target.value)}
-                className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-100"
+                className={SELECT_CLASS}
               >
                 <option value="category">Kategoria</option>
                 <option value="name">Nazwa</option>
@@ -471,7 +481,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
             </label>
           </div>
 
-          {productsError && <p className="text-sm text-red-400">{productsError}</p>}
+          {productsError && <p className="text-sm text-destructive">{productsError}</p>}
 
           <div className="flex flex-col gap-2">
             {productPage.rows.map((row) => (
@@ -484,26 +494,28 @@ export function ReportStep({ scanId }: ReportStepProps) {
             ))}
           </div>
 
-          <div className="flex items-center justify-between text-sm text-slate-400">
-            <button
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={handlePrevPage}
               disabled={productPage.page <= 1}
-              className="rounded-md border border-slate-700 px-3 py-1.5 disabled:opacity-40"
             >
               Poprzednia
-            </button>
+            </Button>
             <span>
               Strona {productPage.page} z {Math.max(1, Math.ceil(productPage.total / productPage.page_size))}
             </span>
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={handleNextPage}
               disabled={productPage.page * productPage.page_size >= productPage.total}
-              className="rounded-md border border-slate-700 px-3 py-1.5 disabled:opacity-40"
             >
               Następna
-            </button>
+            </Button>
           </div>
         </section>
       )}

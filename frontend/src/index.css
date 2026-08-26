@@ -21,7 +21,10 @@
   --secondary: #f5f5f5;
   --secondary-foreground: #171717;
   --muted: #f5f5f5;
-  --muted-foreground: #717171;
+  /* Darkened from #717171 (2026-08-26): 4.48:1 on --muted, a hair below AA (4.5:1), for the
+     ReportStep product-detail panel this token is now used inside. #6c6c6c clears 4.82:1 on
+     --muted and only improves the already-passing uses on --card/--background (4.88 -> 5.25). */
+  --muted-foreground: #6c6c6c;
   --accent: #f5f5f5;
   --accent-foreground: #171717;
   --destructive: #e7000b;
@@ -31,7 +34,11 @@
   --ring: #a1a1a1;
 
   --success: #0d8f4f;
-  --warning: #a3760a;
+  /* Darkened from #a3760a (2026-08-26): the original was 3.74:1 on --muted, below AA
+     (4.5:1) for the 12px warning chips ReportStep introduced. #8a6408 clears 4.93:1 on
+     --muted and 5.37:1 on --card, and only improves the already-passing text-warning
+     uses in Mapping/Scope's warning lists (4.08:1 -> 5.37:1 on --card). */
+  --warning: #8a6408;
 
   --sidebar: #fafafa;
   --sidebar-foreground: #0a0a0a;

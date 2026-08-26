@@ -4,6 +4,8 @@ import { ApiError } from '../api/types'
 import type { ColumnMapping, CsvPreview } from '../api/types'
 import { Button } from '@/components/ui/button'
 import { PaginatedList } from '@/components/PaginatedList'
+import { SELECT_CLASS } from '@/components/ui/selectClass'
+import { cn } from '@/lib/utils'
 import {
   Table,
   TableBody,
@@ -20,9 +22,6 @@ const EMPTY_MAPPING: ColumnMapping = {
   category: null,
   sku: null,
 }
-
-const SELECT_CLASS =
-  'h-8 w-56 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80'
 
 interface MappingStepProps {
   file: File
@@ -108,7 +107,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                   value={mapping.name ?? ''}
                   onChange={(e) => handleFieldChange('name', e.target.value)}
                   disabled={isLoading}
-                  className={SELECT_CLASS}
+                  className={cn(SELECT_CLASS, 'w-56')}
                 >
                   <option value="">— wybierz —</option>
                   {preview.headers.map((h) => (
@@ -122,7 +121,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                   value={mapping.wholesale_price ?? ''}
                   onChange={(e) => handleFieldChange('wholesale_price', e.target.value)}
                   disabled={isLoading}
-                  className={SELECT_CLASS}
+                  className={cn(SELECT_CLASS, 'w-56')}
                 >
                   <option value="">— wybierz —</option>
                   {preview.headers.map((h) => (
@@ -136,7 +135,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                   value={mapping.ean ?? ''}
                   onChange={(e) => handleFieldChange('ean', e.target.value)}
                   disabled={isLoading}
-                  className={SELECT_CLASS}
+                  className={cn(SELECT_CLASS, 'w-56')}
                 >
                   <option value="">— wybierz —</option>
                   {preview.headers.map((h) => (
@@ -150,7 +149,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                   value={mapping.category ?? ''}
                   onChange={(e) => handleFieldChange('category', e.target.value)}
                   disabled={isLoading}
-                  className={SELECT_CLASS}
+                  className={cn(SELECT_CLASS, 'w-56')}
                 >
                   <option value="">— wybierz —</option>
                   {preview.headers.map((h) => (
@@ -164,7 +163,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                   value={mapping.sku ?? ''}
                   onChange={(e) => handleFieldChange('sku', e.target.value)}
                   disabled={isLoading}
-                  className={SELECT_CLASS}
+                  className={cn(SELECT_CLASS, 'w-56')}
                 >
                   <option value="">— brak —</option>
                   {preview.headers.map((h) => (
