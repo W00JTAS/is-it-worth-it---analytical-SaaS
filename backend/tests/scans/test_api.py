@@ -602,34 +602,6 @@ def test_post_scans_still_works_with_no_mapping_fields(tmp_path):
 # --- POST /scans, alongside the existing default CSV upload path ----------
 
 
-class _FakeShopifyResponse:
-    def __init__(self, payload: dict):
-        self._payload = payload
-
-    def raise_for_status(self) -> None:
-        pass
-
-    def json(self) -> dict:
-        return self._payload
-
-
-class _FakeShopifyClient:
-    """Same fixed-sequence fake used by test_shopify_source.py: one currency
-    query response, then one products-page response per call thereafter."""
-
-    def __init__(self, currency: str, pages: list[dict]):
-        self._currency = currency
-        self._pages = list(pages)
-        self.requests: list[dict] = []
-
-    def post(self, url, headers, json):
-        self.requests.append({"url": url, "headers": headers, "json": json})
-        if len(self.requests) == 1:
-            return _FakeShopifyResponse({"data": {"shop": {"currencyCode": self._currency}}})
-        page = self._pages.pop(0)
-        return _FakeShopifyResponse({"data": {"products": page}})
-
-
 class _FakeWooResponse:
     def __init__(self, payload, headers=None):
         self._payload = payload
@@ -677,16 +649,39 @@ def test_post_scans_csv_source_type_requires_a_file(tmp_path):
     assert response.status_code == 400
 
 
-def test_post_scans_shopify_source_type_requires_shop_domain_and_access_token(tmp_path):
+def test_post_scans_rejects_shopify_source_type_pending_hardening(tmp_path, monkeypatch):
+    # ShopifyCatalogSource's GraphQL query requests ~5,050 cost points
+    # against Shopify's hard 1,000-point-per-query cap (per Shopify's own
+    # published API usage limits) -- it is rejected by every real store on
+    # every plan, before executing. It also has no pagination cap and no
+    # response-shape error handling, unlike WooCommerceCatalogSource. Gated
+    # out of this endpoint until it's hardened to the same level; credentials
+    # are irrelevant, the rejection must happen regardless.
+    #
+    # The gate must reject BEFORE ever constructing a ShopifyCatalogSource --
+    # not just happen to fail once it tries a real network call against a
+    # domain that doesn't exist -- so prove that directly: constructing an
+    # httpx.Client inside shopify_source.py must never be reached.
     app, store, cache = _make_app(tmp_path)
     client = TestClient(app)
 
+    def _fail_if_constructed(*args, **kwargs):
+        raise AssertionError(
+            "ShopifyCatalogSource must not be constructed while shopify is gated"
+        )
+
+    monkeypatch.setattr("app.sources.shopify_source.httpx.Client", _fail_if_constructed)
+
     response = client.post(
         "/scans",
-        data={"scope_type": "full", "source_type": "shopify", "shop_domain": "shop.myshopify.com"},
+        data={
+            "scope_type": "full", "source_type": "shopify",
+            "shop_domain": "shop.myshopify.com", "access_token": "tok",
+        },
     )
 
     assert response.status_code == 400
+    assert "shopify" in response.json()["detail"].lower()
 
 
 def test_post_scans_woocommerce_source_type_requires_store_credentials(tmp_path):
@@ -702,55 +697,6 @@ def test_post_scans_woocommerce_source_type_requires_store_credentials(tmp_path)
     )
 
     assert response.status_code == 400
-
-
-def test_post_scans_shopify_source_type_builds_scan_from_shopify_api(tmp_path, monkeypatch):
-    app, store, cache = _make_app(tmp_path)
-    client = TestClient(app)
-    fake_client = _FakeShopifyClient(
-        currency="PLN",
-        pages=[
-            {
-                "edges": [
-                    {
-                        "node": {
-                            "id": "gid://shopify/Product/1",
-                            "title": "Kubek termiczny",
-                            "productType": "Kuchnia",
-                            "variants": {
-                                "edges": [
-                                    {
-                                        "node": {
-                                            "id": "gid://shopify/ProductVariant/1",
-                                            "title": "Default Title",
-                                            "price": "49.99",
-                                            "barcode": "5901234123457",
-                                        }
-                                    }
-                                ]
-                            },
-                        }
-                    }
-                ],
-                "pageInfo": {"hasNextPage": False, "endCursor": None},
-            }
-        ],
-    )
-    monkeypatch.setattr(
-        "app.sources.shopify_source.httpx.Client", lambda *a, **kw: fake_client
-    )
-
-    response = client.post(
-        "/scans",
-        data={
-            "scope_type": "full", "source_type": "shopify",
-            "shop_domain": "test-shop.myshopify.com", "access_token": "tok",
-        },
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["total_products"] == 1
 
 
 def test_post_scans_woocommerce_source_type_builds_scan_from_woocommerce_api(tmp_path, monkeypatch):
@@ -794,25 +740,6 @@ def test_post_scans_woocommerce_source_type_builds_scan_from_woocommerce_api(tmp
 # --- surface as an opaque, unhandled 500 -----------------------------------
 
 
-class _RaisingShopifyClient:
-    """Simulates a non-2xx Shopify response, same shape as
-    test_shopify_source.py's `_RaisingStatusClient`."""
-
-    def post(self, url, headers, json):
-        request = httpx.Request("POST", url)
-        response = httpx.Response(status_code=401, request=request)
-        error = httpx.HTTPStatusError("unauthorized", request=request, response=response)
-
-        class _Resp:
-            def raise_for_status(self) -> None:
-                raise error
-
-            def json(self) -> dict:
-                raise AssertionError("json() should not be called when raise_for_status() raises")
-
-        return _Resp()
-
-
 class _RaisingWooClient:
     """Simulates a non-2xx WooCommerce response: get() itself raises, same
     as `WooCommerceCatalogSource._request`'s `except httpx.HTTPError`
@@ -822,25 +749,6 @@ class _RaisingWooClient:
         request = httpx.Request("GET", url)
         response = httpx.Response(status_code=401, request=request)
         raise httpx.HTTPStatusError("unauthorized", request=request, response=response)
-
-
-def test_post_scans_shopify_api_error_returns_a_client_error_not_500(tmp_path, monkeypatch):
-    app, store, cache = _make_app(tmp_path)
-    client = TestClient(app)
-    monkeypatch.setattr(
-        "app.sources.shopify_source.httpx.Client", lambda *a, **kw: _RaisingShopifyClient()
-    )
-
-    response = client.post(
-        "/scans",
-        data={
-            "scope_type": "full", "source_type": "shopify",
-            "shop_domain": "test-shop.myshopify.com", "access_token": "bad-token",
-        },
-    )
-
-    assert response.status_code < 500
-    assert response.status_code >= 400
 
 
 def test_post_scans_woocommerce_api_error_returns_a_client_error_not_500(tmp_path, monkeypatch):
@@ -893,7 +801,7 @@ def test_post_scans_offloads_create_scan_via_asyncio_to_thread(tmp_path, monkeyp
 # --- concern and must not reject a non-CSV source_type over it ------------
 
 
-def test_post_scans_shopify_source_type_ignores_a_stray_partial_mapping_field(
+def test_post_scans_woocommerce_source_type_ignores_a_stray_partial_mapping_field(
     tmp_path, monkeypatch
 ):
     # A partial column-mapping subset (just "name_column" here) is a 400 for
@@ -902,16 +810,17 @@ def test_post_scans_shopify_source_type_ignores_a_stray_partial_mapping_field(
     # it must be ignored entirely, not misreported as a mapping error.
     app, store, cache = _make_app(tmp_path)
     client = TestClient(app)
-    fake_client = _FakeShopifyClient(currency="PLN", pages=[{"edges": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}])
+    fake_client = _FakeWooClient(currency="PLN", responses=[[]])
     monkeypatch.setattr(
-        "app.sources.shopify_source.httpx.Client", lambda *a, **kw: fake_client
+        "app.sources.woo_source.httpx.Client", lambda *a, **kw: fake_client
     )
 
     response = client.post(
         "/scans",
         data={
-            "scope_type": "full", "source_type": "shopify", "name_column": "nazwa",
-            "shop_domain": "test-shop.myshopify.com", "access_token": "tok",
+            "scope_type": "full", "source_type": "woocommerce", "name_column": "nazwa",
+            "store_url": "https://example-shop.pl", "consumer_key": "ck_test",
+            "consumer_secret": "cs_test",
         },
     )
 
@@ -933,3 +842,40 @@ def test_build_source_woocommerce_sample_seed_ignores_trailing_slash():
     )
 
     assert seed_with_slash == seed_without_slash
+
+
+# --- Code review follow-up: a leftover uploaded file must not be read into -
+# --- memory when source_type isn't "csv" -----------------------------------
+
+
+def test_post_scans_woocommerce_source_type_does_not_read_a_stray_uploaded_file(
+    tmp_path, monkeypatch
+):
+    # The type FastAPI actually constructs for an `UploadFile` parameter at
+    # runtime is starlette's own UploadFile, not fastapi's subclass of it
+    # (confirmed: `type(file)` inside a handler is
+    # `starlette.datastructures.UploadFile`) -- patch the class whose
+    # `.read` is actually invoked.
+    from starlette.datastructures import UploadFile
+
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    fake_client = _FakeWooClient(currency="PLN", responses=[[]])
+    monkeypatch.setattr("app.sources.woo_source.httpx.Client", lambda *a, **kw: fake_client)
+
+    async def _fail_if_read(self, *args, **kwargs):
+        raise AssertionError("file.read() must not be called for a non-csv source_type")
+
+    monkeypatch.setattr(UploadFile, "read", _fail_if_read)
+
+    response = client.post(
+        "/scans",
+        files={"file": ("catalog.csv", io.BytesIO(CSV_BYTES), "text/csv")},
+        data={
+            "scope_type": "full", "source_type": "woocommerce",
+            "store_url": "https://example-shop.pl", "consumer_key": "ck_test",
+            "consumer_secret": "cs_test",
+        },
+    )
+
+    assert response.status_code == 200

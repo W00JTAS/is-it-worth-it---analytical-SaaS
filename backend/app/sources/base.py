@@ -56,6 +56,7 @@ class RawItem:
 
 class BaseCatalogSource(ABC):
     SOURCE_NAME: str
+    warnings: list[str]
 
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)

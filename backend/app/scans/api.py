@@ -341,6 +341,22 @@ async def post_scans(
             status_code=400,
             detail=f"source_type must be one of {VALID_SOURCE_TYPES!r}, got {source_type!r}",
         )
+    if source_type == "shopify":
+        # ShopifyCatalogSource's GraphQL query requests far more than
+        # Shopify's hard per-query cost cap (rejected by every real store,
+        # every plan, before executing), and unlike WooCommerceCatalogSource
+        # has no pagination cap or response-shape error handling. Gated here
+        # until it's hardened to the same level -- see the whole-branch
+        # review that found this (repo-reviewer, 2026-08-27).
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "source_type 'shopify' is not yet production-ready (GraphQL query cost "
+                "exceeds Shopify's per-query limit for any real store; no pagination cap "
+                "or response-shape error handling) -- pending a hardening pass matching "
+                "WooCommerceCatalogSource. Use 'csv' or 'woocommerce' instead."
+            ),
+        )
     if scope_type not in VALID_SCOPE_TYPES:
         raise HTTPException(
             status_code=400,
@@ -376,7 +392,10 @@ async def post_scans(
         else None
     )
 
-    csv_bytes = await file.read() if file is not None else None
+    # Only read the upload into memory for source_type="csv" -- a leftover
+    # `file` on a Shopify/WooCommerce request would otherwise be buffered
+    # into a bytes object and discarded unused.
+    csv_bytes = await file.read() if file is not None and source_type == "csv" else None
     source, sample_seed = _build_source(
         source_type, "default", csv_bytes, column_mapping,
         shop_domain, access_token, store_url, consumer_key, consumer_secret,
