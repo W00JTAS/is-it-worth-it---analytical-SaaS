@@ -50,12 +50,14 @@ class WooCommerceCatalogSource(BaseCatalogSource):
         except httpx.HTTPError as exc:
             raise WooCommerceApiError(f"WooCommerce request failed: {exc}") from exc
 
-    def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        response = self._request(path, params)
+    def _decode_json(self, response: httpx.Response) -> Any:
         try:
             return response.json()
         except json.JSONDecodeError as exc:
             raise WooCommerceApiError(f"WooCommerce response was not valid JSON: {exc}") from exc
+
+    def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+        return self._decode_json(self._request(path, params))
 
     def _paginate(self, path: str) -> Iterable[dict[str, Any]]:
         page = 1
@@ -76,12 +78,7 @@ class WooCommerceCatalogSource(BaseCatalogSource):
                     except ValueError:
                         total_pages = None
 
-            try:
-                items = response.json()
-            except json.JSONDecodeError as exc:
-                raise WooCommerceApiError(
-                    f"WooCommerce response was not valid JSON: {exc}"
-                ) from exc
+            items = self._decode_json(response)
             if not isinstance(items, list):
                 raise WooCommerceApiError(
                     f"WooCommerce response from {path} had an unexpected shape: "
