@@ -9,8 +9,9 @@ from app.sources.woo_source import WooCommerceCatalogSource, WooCommerceApiError
 
 
 class _FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, headers=None):
         self._payload = payload
+        self.headers = headers or {}
 
     def raise_for_status(self) -> None:
         pass
@@ -333,6 +334,86 @@ def test_raises_woocommerce_api_error_when_pagination_never_terminates():
     source = _make_source(_StuckPageClient())
 
     with pytest.raises(WooCommerceApiError, match="did not terminate"):
+        source.fetch_products()
+
+
+def test_stops_paginating_using_total_pages_header_without_a_trailing_empty_page():
+    class _HeaderPagingClient:
+        def get(self, url, params=None):
+            if "currencies" in url:
+                return _FakeResponse({"code": "PLN"})
+            if params["page"] != 1:
+                raise AssertionError(
+                    "should not fetch a page beyond X-WP-TotalPages"
+                )
+            return _FakeResponse(
+                [
+                    {
+                        "id": 1,
+                        "type": "simple",
+                        "name": "Produkt",
+                        "price": "10.00",
+                        "global_unique_id": "",
+                        "categories": [],
+                    }
+                ],
+                headers={"X-WP-TotalPages": "1"},
+            )
+
+    source = _make_source(_HeaderPagingClient())
+
+    products = source.fetch_products()
+
+    assert len(products) == 1
+
+
+def test_wraps_field_shape_errors_raised_by_rawitem_construction():
+    # RawItem's own __post_init__ type guard (backend/app/sources/base.py)
+    # raises a bare TypeError when a source hands it a non-string field --
+    # that must still surface as WooCommerceApiError, not escape the
+    # source's own error boundary.
+    client = _FakeClient(
+        currency="PLN",
+        responses=[
+            [
+                {
+                    "id": 1,
+                    "type": "simple",
+                    "name": "Produkt",
+                    "price": 10.0,  # a number, not a string
+                    "global_unique_id": "",
+                    "categories": [],
+                }
+            ],
+            [],
+        ],
+    )
+    source = _make_source(client)
+
+    with pytest.raises(WooCommerceApiError):
+        source.fetch_products()
+
+
+def test_raises_woocommerce_api_error_on_non_string_variation_attribute():
+    client = _FakeClient(
+        currency="PLN",
+        responses=[
+            [{"id": 2, "type": "variable", "name": "Produkt", "categories": []}],
+            [
+                {
+                    "id": 20,
+                    "price": "10.00",
+                    "global_unique_id": "",
+                    "attributes": ["not-an-attribute-object"],
+                }
+            ],
+            [],
+            [],
+        ],
+    )
+    source = _make_source(client)
+
+    with pytest.raises(WooCommerceApiError):
         source.fetch_products()
 
 

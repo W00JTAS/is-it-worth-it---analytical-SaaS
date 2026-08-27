@@ -9,13 +9,14 @@ from app.sources.base import BaseCatalogSource, RawItem
 
 DEFAULT_PER_PAGE = 100
 
-# Pagination advances by incrementing `page` until an empty page comes back.
-# Unlike Shopify's cursor (which can be checked for "did it actually move"),
-# a page number always "advances" even if the server ignores it (a caching
-# proxy or CDN serving a stale page 1 forever). This cap is the
-# mechanism-independent fallback: it bounds the damage instead of detecting
-# the stall directly.
-MAX_PAGES = 10_000
+# `X-WP-TotalPages` (always sent by the WordPress REST API, per its own
+# docs) is the authoritative stop signal and is used when present. This cap
+# is only the fallback for a store that omits it: pagination advances by
+# incrementing `page`, and a page number always "advances" even if the
+# server ignores it (a caching proxy or CDN serving a stale page 1
+# forever) -- unlike Shopify's cursor, which can be checked for "did it
+# actually move".
+MAX_PAGES = 2_000
 
 
 class WooCommerceApiError(Exception):
@@ -41,25 +42,46 @@ class WooCommerceCatalogSource(BaseCatalogSource):
             timeout=30.0, auth=(consumer_key, consumer_secret)
         )
 
-    def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+    def _request(self, path: str, params: dict[str, Any] | None = None) -> Any:
         try:
             response = self._client.get(f"{self.store_url}{path}", params=params or {})
             response.raise_for_status()
-            return response.json()
+            return response
         except httpx.HTTPError as exc:
             raise WooCommerceApiError(f"WooCommerce request failed: {exc}") from exc
+
+    def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+        response = self._request(path, params)
+        try:
+            return response.json()
         except json.JSONDecodeError as exc:
             raise WooCommerceApiError(f"WooCommerce response was not valid JSON: {exc}") from exc
 
     def _paginate(self, path: str) -> Iterable[dict[str, Any]]:
         page = 1
+        total_pages: int | None = None
         while True:
             if page > MAX_PAGES:
                 raise WooCommerceApiError(
                     f"WooCommerce pagination for {path} did not terminate within "
                     f"{MAX_PAGES} pages"
                 )
-            items = self._get(path, {"page": page, "per_page": self.per_page})
+            response = self._request(path, {"page": page, "per_page": self.per_page})
+
+            if total_pages is None:
+                header_value = response.headers.get("X-WP-TotalPages")
+                if header_value is not None:
+                    try:
+                        total_pages = int(header_value)
+                    except ValueError:
+                        total_pages = None
+
+            try:
+                items = response.json()
+            except json.JSONDecodeError as exc:
+                raise WooCommerceApiError(
+                    f"WooCommerce response was not valid JSON: {exc}"
+                ) from exc
             if not isinstance(items, list):
                 raise WooCommerceApiError(
                     f"WooCommerce response from {path} had an unexpected shape: "
@@ -68,9 +90,20 @@ class WooCommerceCatalogSource(BaseCatalogSource):
             if not items:
                 break
             yield from items
+
+            if total_pages is not None and page >= total_pages:
+                break
             page += 1
 
     def _iter_raw_items(self) -> Iterable[RawItem]:
+        try:
+            yield from self._iter_raw_items_unsafe()
+        except (KeyError, AttributeError, TypeError) as exc:
+            raise WooCommerceApiError(
+                f"WooCommerce response had an unexpected shape: {exc}"
+            ) from exc
+
+    def _iter_raw_items_unsafe(self) -> Iterable[RawItem]:
         currency_data = self._get("/wp-json/wc/v3/data/currencies/current")
         try:
             currency = currency_data["code"]
@@ -81,6 +114,19 @@ class WooCommerceCatalogSource(BaseCatalogSource):
 
         for product in self._paginate("/wp-json/wc/v3/products"):
             yield from self._map_product(product, currency)
+
+    def _build_raw_item(self, **kwargs: Any) -> RawItem:
+        # RawItem.__post_init__ (app/sources/base.py) raises a bare
+        # TypeError when a field isn't the scalar it's declared as -- catch
+        # it here so a vendor field with an unexpected shape (e.g. a number
+        # instead of a string) surfaces as WooCommerceApiError like every
+        # other shape problem in this file, not as an uncaught TypeError.
+        try:
+            return RawItem(**kwargs)
+        except TypeError as exc:
+            raise WooCommerceApiError(
+                f"WooCommerce response had an unexpected field shape: {exc}"
+            ) from exc
 
     def _map_product(self, product: dict[str, Any], currency: str) -> Iterable[RawItem]:
         try:
@@ -95,7 +141,7 @@ class WooCommerceCatalogSource(BaseCatalogSource):
             ) from exc
 
         if product_type == "simple":
-            yield RawItem(
+            yield self._build_raw_item(
                 label=f"Product {product_id}",
                 external_id=str(product_id),
                 variant_id=None,
@@ -123,25 +169,35 @@ class WooCommerceCatalogSource(BaseCatalogSource):
     ) -> RawItem:
         try:
             variation_id = variation["id"]
-        except (KeyError, TypeError) as exc:
+
+            # A blank product name composed with a non-blank attribute
+            # suffix would still look non-blank (e.g. "- Rozmiar: S"),
+            # silently defeating BaseCatalogSource's missing-name check.
+            # Force it blank so every variation of a blank-named product is
+            # skipped.
+            if not product_name.strip():
+                name = ""
+            else:
+                attributes = variation.get("attributes") or []
+                parts = []
+                for attr in attributes:
+                    attr_name = attr.get("name")
+                    attr_option = attr.get("option")
+                    if not isinstance(attr_name, (str, type(None))) or not isinstance(
+                        attr_option, (str, type(None))
+                    ):
+                        raise TypeError(
+                            f"variation attribute had a non-string name/option: {attr!r}"
+                        )
+                    parts.append(f"{attr_name or ''}: {attr_option or ''}")
+                suffix = ", ".join(parts)
+                name = f"{product_name} - {suffix}" if suffix else product_name
+        except (KeyError, AttributeError, TypeError) as exc:
             raise WooCommerceApiError(
                 f"WooCommerce variation response had an unexpected shape: {exc}"
             ) from exc
 
-        # A blank product name composed with a non-blank attribute suffix
-        # would still look non-blank (e.g. "- Rozmiar: S"), silently
-        # defeating BaseCatalogSource's missing-name check. Force it blank
-        # so every variation of a blank-named product is skipped.
-        if not product_name.strip():
-            name = ""
-        else:
-            attributes = variation.get("attributes") or []
-            suffix = ", ".join(
-                f"{attr.get('name') or ''}: {attr.get('option') or ''}" for attr in attributes
-            )
-            name = f"{product_name} - {suffix}" if suffix else product_name
-
-        return RawItem(
+        return self._build_raw_item(
             label=f"Product {product_id}, variation {variation_id}",
             external_id=str(product_id),
             variant_id=str(variation_id),
