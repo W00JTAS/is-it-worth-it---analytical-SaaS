@@ -114,7 +114,7 @@ class WooCommerceCatalogSource(BaseCatalogSource):
         else:
             attributes = variation.get("attributes") or []
             suffix = ", ".join(
-                f"{attr.get('name', '')}: {attr.get('option', '')}" for attr in attributes
+                f"{attr.get('name') or ''}: {attr.get('option') or ''}" for attr in attributes
             )
             name = f"{product_name} - {suffix}" if suffix else product_name
 
