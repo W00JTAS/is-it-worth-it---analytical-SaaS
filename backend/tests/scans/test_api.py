@@ -3,6 +3,7 @@ import io
 import logging
 from decimal import Decimal
 
+import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -13,6 +14,7 @@ from app.cache.sqlite_cache import PriceCache
 from app.providers.base import OfferResult
 from app.scans.api import (
     StartScanRequest,
+    _build_source,
     _scans_in_flight,
     get_cache,
     get_provider,
@@ -786,3 +788,148 @@ def test_post_scans_woocommerce_source_type_builds_scan_from_woocommerce_api(tmp
     assert response.status_code == 200
     body = response.json()
     assert body["total_products"] == 1
+
+
+# --- Code review follow-up: a Shopify/WooCommerce API failure must not ----
+# --- surface as an opaque, unhandled 500 -----------------------------------
+
+
+class _RaisingShopifyClient:
+    """Simulates a non-2xx Shopify response, same shape as
+    test_shopify_source.py's `_RaisingStatusClient`."""
+
+    def post(self, url, headers, json):
+        request = httpx.Request("POST", url)
+        response = httpx.Response(status_code=401, request=request)
+        error = httpx.HTTPStatusError("unauthorized", request=request, response=response)
+
+        class _Resp:
+            def raise_for_status(self) -> None:
+                raise error
+
+            def json(self) -> dict:
+                raise AssertionError("json() should not be called when raise_for_status() raises")
+
+        return _Resp()
+
+
+class _RaisingWooClient:
+    """Simulates a non-2xx WooCommerce response: get() itself raises, same
+    as `WooCommerceCatalogSource._request`'s `except httpx.HTTPError`
+    path."""
+
+    def get(self, url, params=None):
+        request = httpx.Request("GET", url)
+        response = httpx.Response(status_code=401, request=request)
+        raise httpx.HTTPStatusError("unauthorized", request=request, response=response)
+
+
+def test_post_scans_shopify_api_error_returns_a_client_error_not_500(tmp_path, monkeypatch):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    monkeypatch.setattr(
+        "app.sources.shopify_source.httpx.Client", lambda *a, **kw: _RaisingShopifyClient()
+    )
+
+    response = client.post(
+        "/scans",
+        data={
+            "scope_type": "full", "source_type": "shopify",
+            "shop_domain": "test-shop.myshopify.com", "access_token": "bad-token",
+        },
+    )
+
+    assert response.status_code < 500
+    assert response.status_code >= 400
+
+
+def test_post_scans_woocommerce_api_error_returns_a_client_error_not_500(tmp_path, monkeypatch):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    monkeypatch.setattr(
+        "app.sources.woo_source.httpx.Client", lambda *a, **kw: _RaisingWooClient()
+    )
+
+    response = client.post(
+        "/scans",
+        data={
+            "scope_type": "full", "source_type": "woocommerce",
+            "store_url": "https://example-shop.pl", "consumer_key": "ck_test",
+            "consumer_secret": "cs_test",
+        },
+    )
+
+    assert response.status_code < 500
+    assert response.status_code >= 400
+
+
+# --- Code review follow-up: create_scan (which now does blocking network --
+# --- I/O for Shopify/WooCommerce) must not run directly on the event loop -
+
+
+def test_post_scans_offloads_create_scan_via_asyncio_to_thread(tmp_path, monkeypatch):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    calls = []
+    real_to_thread = asyncio.to_thread
+
+    async def spy_to_thread(func, *args, **kwargs):
+        calls.append(func)
+        return await real_to_thread(func, *args, **kwargs)
+
+    monkeypatch.setattr(api_module.asyncio, "to_thread", spy_to_thread)
+
+    response = client.post(
+        "/scans",
+        files={"file": ("catalog.csv", io.BytesIO(CSV_BYTES), "text/csv")},
+        data={"scope_type": "full"},
+    )
+
+    assert response.status_code == 200
+    assert api_module.create_scan in calls
+
+
+# --- Code review follow-up: column-mapping validation is a CSV-only -------
+# --- concern and must not reject a non-CSV source_type over it ------------
+
+
+def test_post_scans_shopify_source_type_ignores_a_stray_partial_mapping_field(
+    tmp_path, monkeypatch
+):
+    # A partial column-mapping subset (just "name_column" here) is a 400 for
+    # source_type="csv" (see test_post_scans_rejects_partial_mapping_subset),
+    # but column mapping is a CSV-only concern -- for any other source_type
+    # it must be ignored entirely, not misreported as a mapping error.
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    fake_client = _FakeShopifyClient(currency="PLN", pages=[{"edges": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}])
+    monkeypatch.setattr(
+        "app.sources.shopify_source.httpx.Client", lambda *a, **kw: fake_client
+    )
+
+    response = client.post(
+        "/scans",
+        data={
+            "scope_type": "full", "source_type": "shopify", "name_column": "nazwa",
+            "shop_domain": "test-shop.myshopify.com", "access_token": "tok",
+        },
+    )
+
+    assert response.status_code == 200
+
+
+# --- Code review follow-up (minor): the WooCommerce sample_seed must not --
+# --- differ just because the store_url had a trailing slash ---------------
+
+
+def test_build_source_woocommerce_sample_seed_ignores_trailing_slash():
+    _, seed_with_slash = _build_source(
+        "woocommerce", "t1", None, None, None, None,
+        "https://example-shop.pl/", "ck", "cs",
+    )
+    _, seed_without_slash = _build_source(
+        "woocommerce", "t1", None, None, None, None,
+        "https://example-shop.pl", "ck", "cs",
+    )
+
+    assert seed_with_slash == seed_without_slash

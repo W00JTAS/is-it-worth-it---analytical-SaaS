@@ -20,8 +20,8 @@ from app.sources.base import CatalogSource
 from app.sources.column_mapping import ColumnMapping, ColumnMappingError
 from app.sources.csv_preview import CsvPreview, build_csv_preview
 from app.sources.csv_source import CsvCatalogSource, EmptyCsvError
-from app.sources.shopify_source import ShopifyCatalogSource
-from app.sources.woo_source import WooCommerceCatalogSource
+from app.sources.shopify_source import ShopifyApiError, ShopifyCatalogSource
+from app.sources.woo_source import WooCommerceApiError, WooCommerceCatalogSource
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +241,10 @@ def _build_source(
             store_url=store_url, consumer_key=consumer_key, consumer_secret=consumer_secret,
             tenant_id=tenant_id,
         ),
-        _sample_seed(store_url.encode()),
+        # rstrip("/") to match WooCommerceCatalogSource's own normalization
+        # (store_url.rstrip("/")), so two requests differing only by a
+        # trailing slash sample the same products.
+        _sample_seed(store_url.rstrip("/").encode()),
     )
 
 
@@ -362,8 +365,15 @@ async def post_scans(
             detail="sample_per_category must be >= 1 when scope_type is 'sample'",
         )
 
-    column_mapping = _column_mapping_from_form(
-        name_column, wholesale_price_column, ean_column, category_column, sku_column,
+    # Column mapping is a CSV-only concern; validating it for another
+    # source_type would reject the request over a field that has nothing to
+    # do with the actual (Shopify/WooCommerce) source being scanned.
+    column_mapping = (
+        _column_mapping_from_form(
+            name_column, wholesale_price_column, ean_column, category_column, sku_column,
+        )
+        if source_type == "csv"
+        else None
     )
 
     csv_bytes = await file.read() if file is not None else None
@@ -372,14 +382,20 @@ async def post_scans(
         shop_domain, access_token, store_url, consumer_key, consumer_secret,
     )
     try:
-        scan_id, warnings = create_scan(
+        # Shopify/WooCommerce sources do blocking network I/O inside
+        # fetch_products() (called from create_scan) -- offload to a thread
+        # like post_csv_preview already does for build_csv_preview, so a
+        # slow/large catalog fetch doesn't stall the event loop (and with it
+        # every other concurrent request, including SSE progress polling).
+        scan_id, warnings = await asyncio.to_thread(
+            create_scan,
             source=source, scope_type=scope_type,
             sample_per_category=sample_per_category, sample_seed=sample_seed,
             market=market, max_delivery_days=max_delivery_days, max_concurrency=max_concurrency,
             staleness_threshold_days=staleness_threshold_days,
             store=store, cache=cache, provider_name=provider.name,
         )
-    except (EmptyCsvError, ColumnMappingError) as exc:
+    except (EmptyCsvError, ColumnMappingError, ShopifyApiError, WooCommerceApiError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     scan = store.get_scan(scan_id)
