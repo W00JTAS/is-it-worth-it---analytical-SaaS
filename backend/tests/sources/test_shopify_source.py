@@ -145,72 +145,6 @@ def test_names_non_default_variants_with_variant_title():
     ]
 
 
-def test_skips_zero_price_variant_and_falls_back_category():
-    client = _FakeClient(
-        currency="PLN",
-        pages=[
-            _single_product_page(
-                {
-                    "id": "gid://shopify/Product/3",
-                    "title": "Darmowa próbka",
-                    "productType": "",
-                    "variants": {
-                        "edges": [
-                            {
-                                "node": {
-                                    "id": "gid://shopify/ProductVariant/30",
-                                    "title": "Default Title",
-                                    "price": "0.00",
-                                    "barcode": None,
-                                }
-                            }
-                        ]
-                    },
-                }
-            )
-        ],
-    )
-    source = _make_source(client)
-
-    products = source.fetch_products()
-
-    assert products == []
-    assert any("zero price" in w for w in source.warnings)
-
-
-def test_clears_invalid_barcode_checksum():
-    client = _FakeClient(
-        currency="PLN",
-        pages=[
-            _single_product_page(
-                {
-                    "id": "gid://shopify/Product/4",
-                    "title": "Zegarek",
-                    "productType": "Akcesoria",
-                    "variants": {
-                        "edges": [
-                            {
-                                "node": {
-                                    "id": "gid://shopify/ProductVariant/40",
-                                    "title": "Default Title",
-                                    "price": "199.00",
-                                    "barcode": "1234567890123",
-                                }
-                            }
-                        ]
-                    },
-                }
-            )
-        ],
-    )
-    source = _make_source(client)
-
-    products = source.fetch_products()
-
-    assert products[0].ean is None
-    assert any("invalid EAN checksum" in w for w in source.warnings)
-
-
 def test_paginates_across_multiple_pages():
     def _page(product_id: str, variant_id: str, has_next: bool, cursor: str | None) -> dict:
         return {
@@ -306,83 +240,7 @@ def test_raises_shopify_api_error_on_graphql_errors_array():
         source.fetch_products()
 
 
-def test_dedups_same_ean_across_variants_keeping_cheaper_price():
-    client = _FakeClient(
-        currency="PLN",
-        pages=[
-            _single_product_page(
-                {
-                    "id": "gid://shopify/Product/5",
-                    "title": "Kubek",
-                    "productType": "Kuchnia",
-                    "variants": {
-                        "edges": [
-                            {
-                                "node": {
-                                    "id": "gid://shopify/ProductVariant/50",
-                                    "title": "S",
-                                    "price": "49.99",
-                                    "barcode": "5901234123457",
-                                }
-                            },
-                            {
-                                "node": {
-                                    "id": "gid://shopify/ProductVariant/51",
-                                    "title": "M",
-                                    "price": "39.99",
-                                    "barcode": "5901234123457",
-                                }
-                            },
-                        ]
-                    },
-                }
-            )
-        ],
-    )
-    source = _make_source(client)
-
-    products = source.fetch_products()
-
-    assert len(products) == 1
-    assert products[0].wholesale_price == Decimal("39.99")
-    assert products[0].variant_id == "gid://shopify/ProductVariant/51"
-    assert any("duplicate EAN" in w for w in source.warnings)
-
-
-def test_pads_upc_a_barcode_to_ean_13():
-    client = _FakeClient(
-        currency="PLN",
-        pages=[
-            _single_product_page(
-                {
-                    "id": "gid://shopify/Product/6",
-                    "title": "Guma do żucia",
-                    "productType": "Spożywcze",
-                    "variants": {
-                        "edges": [
-                            {
-                                "node": {
-                                    "id": "gid://shopify/ProductVariant/60",
-                                    "title": "Default Title",
-                                    "price": "5.00",
-                                    "barcode": "036000291452",
-                                }
-                            }
-                        ]
-                    },
-                }
-            )
-        ],
-    )
-    source = _make_source(client)
-
-    products = source.fetch_products()
-
-    assert products[0].ean == "0036000291452"
-    assert not any("invalid EAN checksum" in w for w in source.warnings)
-
-
-def test_skips_product_with_blank_title():
+def test_skips_all_variants_of_product_with_blank_title():
     client = _FakeClient(
         currency="PLN",
         pages=[
@@ -400,7 +258,15 @@ def test_skips_product_with_blank_title():
                                     "price": "10.00",
                                     "barcode": None,
                                 }
-                            }
+                            },
+                            {
+                                "node": {
+                                    "id": "gid://shopify/ProductVariant/71",
+                                    "title": "S",
+                                    "price": "12.00",
+                                    "barcode": None,
+                                }
+                            },
                         ]
                     },
                 }
@@ -412,39 +278,9 @@ def test_skips_product_with_blank_title():
     products = source.fetch_products()
 
     assert products == []
-    assert any("missing title" in w for w in source.warnings)
-
-
-def test_strips_whitespace_only_product_type_before_fallback():
-    client = _FakeClient(
-        currency="PLN",
-        pages=[
-            _single_product_page(
-                {
-                    "id": "gid://shopify/Product/8",
-                    "title": "Notes",
-                    "productType": "   ",
-                    "variants": {
-                        "edges": [
-                            {
-                                "node": {
-                                    "id": "gid://shopify/ProductVariant/80",
-                                    "title": "Default Title",
-                                    "price": "10.00",
-                                    "barcode": None,
-                                }
-                            }
-                        ]
-                    },
-                }
-            )
-        ],
-    )
-    source = _make_source(client)
-
-    products = source.fetch_products()
-
-    assert products[0].category == "Bez kategorii"
+    assert sum("missing name" in w for w in source.warnings) == 2
+    assert any("ProductVariant/70" in w for w in source.warnings)
+    assert any("ProductVariant/71" in w for w in source.warnings)
 
 
 def test_raises_on_pagination_cursor_not_advancing():

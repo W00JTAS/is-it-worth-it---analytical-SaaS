@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Iterable
 
 import httpx
 
-from app.models.product import Product
-from app.normalize.ean import is_valid_ean
-from app.normalize.money import InvalidPriceError, parse_price
+from app.sources.base import BaseCatalogSource, RawItem
 
 DEFAULT_API_VERSION = "2026-07"
 
@@ -47,7 +45,7 @@ query($cursor: String) {
 """
 
 
-class ShopifyCatalogSource:
+class ShopifyCatalogSource(BaseCatalogSource):
     SOURCE_NAME = "shopify"
 
     def __init__(
@@ -58,12 +56,11 @@ class ShopifyCatalogSource:
         client: httpx.Client | None = None,
         api_version: str = DEFAULT_API_VERSION,
     ) -> None:
+        super().__init__(tenant_id)
         self.shop_domain = shop_domain
         self.access_token = access_token
-        self.tenant_id = tenant_id
         self.api_version = api_version
         self._client = client or httpx.Client(timeout=30.0)
-        self.warnings: list[str] = []
 
     @property
     def _url(self) -> str:
@@ -99,21 +96,14 @@ class ShopifyCatalogSource:
         except (KeyError, AttributeError, TypeError) as exc:
             raise ShopifyApiError(f"Shopify response had an unexpected shape: {exc}") from exc
 
-    def fetch_products(self) -> list[Product]:
+    def _iter_raw_items(self) -> Iterable[RawItem]:
         currency = self._post(CURRENCY_QUERY)["shop"]["currencyCode"]
 
-        # Maps a seen EAN to its product's index in `products`, so a later
-        # duplicate that turns out to be cheaper can overwrite the kept
-        # product in place (preserving first-occurrence ordering) rather than
-        # being appended as a second entry. Mirrors CsvCatalogSource's dedup.
-        seen_eans: dict[str, int] = {}
-        products: list[Product] = []
         cursor: str | None = None
         while True:
             data = self._post(PRODUCTS_QUERY, {"cursor": cursor})["products"]
             for edge in data["edges"]:
-                for product in self._map_product(edge["node"], currency):
-                    self._append_with_dedup(products, seen_eans, product)
+                yield from self._map_product(edge["node"], currency)
 
             page_info = data["pageInfo"]
             if not page_info["hasNextPage"]:
@@ -127,96 +117,35 @@ class ShopifyCatalogSource:
                 )
             cursor = next_cursor
 
-        return products
-
-    def _append_with_dedup(
-        self,
-        products: list[Product],
-        seen_eans: dict[str, int],
-        product: Product,
-    ) -> None:
-        if product.ean is not None and product.ean in seen_eans:
-            existing_index = seen_eans[product.ean]
-            existing = products[existing_index]
-            if product.wholesale_price < existing.wholesale_price:
-                self.warnings.append(
-                    f"Product {product.external_id}, variant {product.variant_id}: "
-                    f"duplicate EAN '{product.ean}', replaced previously kept product "
-                    f"(price {existing.wholesale_price}) with this cheaper variant "
-                    f"(price {product.wholesale_price})"
-                )
-                products[existing_index] = product
-            else:
-                self.warnings.append(
-                    f"Product {product.external_id}, variant {product.variant_id}: "
-                    f"duplicate EAN '{product.ean}', dropped (price "
-                    f"{product.wholesale_price} not cheaper than kept price "
-                    f"{existing.wholesale_price})"
-                )
-            return
-
-        products.append(product)
-        if product.ean is not None:
-            seen_eans[product.ean] = len(products) - 1
-
-    def _map_product(self, node: dict[str, Any], currency: str) -> list[Product]:
+    def _map_product(self, node: dict[str, Any], currency: str) -> Iterable[RawItem]:
         product_id = node["id"]
         title = (node.get("title") or "").strip()
-        if not title:
-            self.warnings.append(f"Product {product_id}: missing title, skipped")
-            return []
-        category = (node.get("productType") or "").strip() or "Bez kategorii"
+        category = node.get("productType") or ""
 
-        mapped: list[Product] = []
         for variant_edge in node["variants"]["edges"]:
             variant = variant_edge["node"]
             variant_id = variant["id"]
-
-            raw_price = variant.get("price") or ""
-            try:
-                wholesale_price = parse_price(raw_price)
-            except InvalidPriceError:
-                self.warnings.append(
-                    f"Product {product_id}, variant {variant_id}: invalid price "
-                    f"'{raw_price}', skipped"
-                )
-                continue
-
-            if wholesale_price == 0:
-                self.warnings.append(
-                    f"Product {product_id}, variant {variant_id}: zero price, skipped"
-                )
-                continue
-
             variant_title = variant.get("title") or "Default Title"
-            name = title if variant_title == "Default Title" else f"{title} - {variant_title}"
 
-            raw_barcode = (variant.get("barcode") or "").strip()
-            if len(raw_barcode) == 12 and raw_barcode.isdigit():
-                # UPC-A is numerically identical to EAN-13 with a leading zero.
-                raw_barcode = "0" + raw_barcode
-            ean: str | None = None
-            if raw_barcode:
-                if is_valid_ean(raw_barcode):
-                    ean = raw_barcode
-                else:
-                    self.warnings.append(
-                        f"Product {product_id}, variant {variant_id}: invalid EAN "
-                        f"checksum '{raw_barcode}', ean cleared"
-                    )
+            # A blank title composed with a non-default variant title would
+            # still look non-blank (e.g. "- S"), silently defeating
+            # BaseCatalogSource's missing-name check. Force it blank so every
+            # variant of a blank-titled product is skipped, not just the
+            # Default Title one.
+            if not title:
+                name = ""
+            elif variant_title == "Default Title":
+                name = title
+            else:
+                name = f"{title} - {variant_title}"
 
-            mapped.append(
-                Product(
-                    tenant_id=self.tenant_id,
-                    source=self.SOURCE_NAME,
-                    external_id=product_id,
-                    variant_id=variant_id,
-                    name=name,
-                    ean=ean,
-                    wholesale_price=wholesale_price,
-                    currency=currency,
-                    category=category,
-                )
+            yield RawItem(
+                label=f"Product {product_id}, variant {variant_id}",
+                external_id=product_id,
+                variant_id=variant_id,
+                name=name,
+                raw_price=variant.get("price") or "",
+                raw_ean=variant.get("barcode") or "",
+                raw_category=category,
+                currency=currency,
             )
-
-        return mapped
