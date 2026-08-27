@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Iterable, Protocol, runtime_checkable
 
 from app.models.product import Product
@@ -29,6 +29,17 @@ class RawItem:
 
 class BaseCatalogSource(ABC):
     SOURCE_NAME: str
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        # Fail at class-definition time, not when `_normalize` first reaches
+        # for `self.SOURCE_NAME` deep inside a fetch (potentially after a
+        # paid external API round-trip). `"SOURCE_NAME" in cls.__dict__`
+        # rather than `hasattr(cls, "SOURCE_NAME")`: the latter would also be
+        # satisfied by a value inherited from a parent class, which is not
+        # what "this subclass forgot to set it" means.
+        if "SOURCE_NAME" not in cls.__dict__:
+            raise TypeError(f"{cls.__name__} must set SOURCE_NAME")
 
     def __init__(self, tenant_id: str) -> None:
         self.tenant_id = tenant_id
@@ -101,8 +112,11 @@ class BaseCatalogSource(ABC):
                     f"item (price {existing.wholesale_price}) with this cheaper item "
                     f"(price {product.wholesale_price})"
                 )
-                # Update the price of the existing product, preserving its identity
-                products[existing_index] = replace(existing, wholesale_price=product.wholesale_price)
+                # A later cheaper duplicate overwrites the kept product in
+                # place, preserving first-occurrence *ordering* (it stays at
+                # `existing_index`) -- not identity: the whole record becomes
+                # the new, cheaper one.
+                products[existing_index] = product
             else:
                 self.warnings.append(
                     f"{label}: duplicate EAN '{product.ean}', dropped (price "

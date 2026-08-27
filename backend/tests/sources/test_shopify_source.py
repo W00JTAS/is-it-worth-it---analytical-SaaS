@@ -193,6 +193,54 @@ def test_paginates_across_multiple_pages():
     assert client.requests[2]["json"]["variables"]["cursor"] == "cursor-1"
 
 
+def test_dedups_same_ean_across_variants_keeping_cheaper_price():
+    # Shopify-specific: two variants of the same product share a barcode, and
+    # the cheaper variant's variant_id must fully replace the kept record's
+    # identity -- not just its price. The generic FakeSource fixture in
+    # test_base_source.py always sets variant_id=None, so it can't express
+    # this; only a real source that contributes variant_id exercises it.
+    client = _FakeClient(
+        currency="PLN",
+        pages=[
+            _single_product_page(
+                {
+                    "id": "gid://shopify/Product/5",
+                    "title": "Kubek",
+                    "productType": "Kuchnia",
+                    "variants": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": "gid://shopify/ProductVariant/50",
+                                    "title": "S",
+                                    "price": "49.99",
+                                    "barcode": "5901234123457",
+                                }
+                            },
+                            {
+                                "node": {
+                                    "id": "gid://shopify/ProductVariant/51",
+                                    "title": "M",
+                                    "price": "39.99",
+                                    "barcode": "5901234123457",
+                                }
+                            },
+                        ]
+                    },
+                }
+            )
+        ],
+    )
+    source = _make_source(client)
+
+    products = source.fetch_products()
+
+    assert len(products) == 1
+    assert products[0].wholesale_price == Decimal("39.99")
+    assert products[0].variant_id == "gid://shopify/ProductVariant/51"
+    assert any("duplicate EAN" in w for w in source.warnings)
+
+
 class _RaisingStatusClient:
     """Simulates a non-2xx HTTP response: raise_for_status() raises."""
 

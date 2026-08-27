@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from app.sources.base import BaseCatalogSource, RawItem
 
 VALID_EAN = "5901234123457"
@@ -123,7 +125,7 @@ def test_duplicate_ean_replaces_with_cheaper_later_item():
     assert any("duplicate EAN" in w for w in source.warnings)
 
 
-def test_duplicate_ean_three_items_keeps_cheapest_at_first_position():
+def test_duplicate_ean_three_items_replaces_at_first_position():
     source = FakeSource(
         [
             _item(label="Row 2", external_id="2", raw_price="200.00"),
@@ -133,9 +135,35 @@ def test_duplicate_ean_three_items_keeps_cheapest_at_first_position():
     )
     products = source.fetch_products()
     assert len(products) == 1
-    assert products[0].external_id == "2"
+    assert products[0].external_id == "4"
     assert products[0].wholesale_price == Decimal("100.00")
     assert sum("duplicate EAN" in w for w in source.warnings) == 2
+
+
+def test_subclass_without_source_name_raises_type_error_at_class_definition():
+    # Must fire while the `class` statement itself executes -- i.e. from
+    # `__init_subclass__` -- not deferred to instantiation or to the first
+    # `_normalize` call during a fetch. Wrapping the `class` statement in
+    # pytest.raises (rather than wrapping instantiation/fetch_products) is
+    # what proves that: if the check were instead implemented in
+    # `__init__` or inside `_normalize`, this class statement alone would
+    # succeed and the test would fail with "DID NOT RAISE".
+    with pytest.raises(TypeError, match="SOURCE_NAME"):
+
+        class MissingSourceName(BaseCatalogSource):
+            def _iter_raw_items(self):
+                return iter(())
+
+
+def test_subclass_with_source_name_does_not_raise():
+    class HasSourceName(BaseCatalogSource):
+        SOURCE_NAME = "has-name"
+
+        def _iter_raw_items(self):
+            return iter(())
+
+    source = HasSourceName(tenant_id="t1")
+    assert source.SOURCE_NAME == "has-name"
 
 
 def test_items_without_ean_are_never_deduped():

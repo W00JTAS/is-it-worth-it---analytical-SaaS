@@ -55,6 +55,19 @@ def test_external_id_uses_sku_column_when_present():
     assert products[0].external_id == "ABC-123"
 
 
+def test_skips_row_with_comma_decimal_zero_price():
+    # Regression for a real 115k-row supplier file (see .claude/rules/money.md)
+    # where ~37k rows carried a "0,00" zero-price marker in Polish
+    # comma-decimal form. This is CSV-format-specific: it proves the CSV row
+    # (semicolon-delimited, comma-decimal) actually reaches the base's
+    # zero-price check as "0" and gets skipped, not just that the generic
+    # parser rejects "0.00" in isolation.
+    source = CsvCatalogSource(_csv(f"Łóżko;0,00;{VALID_EAN};Meble\n"), tenant_id="t1")
+    products = source.fetch_products()
+    assert products == []
+    assert any("zero price" in w for w in source.warnings)
+
+
 def test_parses_bom_prefixed_csv_end_to_end():
     # b"\xef\xbb\xbf" is the UTF-8 BOM Excel-on-Windows prepends when exporting
     # CSV. Previously this raised ColumnMappingError because the BOM ended up
