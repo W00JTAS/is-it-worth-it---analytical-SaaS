@@ -594,3 +594,195 @@ def test_post_scans_still_works_with_no_mapping_fields(tmp_path):
     )
 
     assert response.status_code == 200
+
+
+# --- source_type: wiring a real source (Shopify/WooCommerce) into --------
+# --- POST /scans, alongside the existing default CSV upload path ----------
+
+
+class _FakeShopifyResponse:
+    def __init__(self, payload: dict):
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        pass
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _FakeShopifyClient:
+    """Same fixed-sequence fake used by test_shopify_source.py: one currency
+    query response, then one products-page response per call thereafter."""
+
+    def __init__(self, currency: str, pages: list[dict]):
+        self._currency = currency
+        self._pages = list(pages)
+        self.requests: list[dict] = []
+
+    def post(self, url, headers, json):
+        self.requests.append({"url": url, "headers": headers, "json": json})
+        if len(self.requests) == 1:
+            return _FakeShopifyResponse({"data": {"shop": {"currencyCode": self._currency}}})
+        page = self._pages.pop(0)
+        return _FakeShopifyResponse({"data": {"products": page}})
+
+
+class _FakeWooResponse:
+    def __init__(self, payload, headers=None):
+        self._payload = payload
+        self.headers = headers or {}
+
+    def raise_for_status(self) -> None:
+        pass
+
+    def json(self):
+        return self._payload
+
+
+class _FakeWooClient:
+    """Same fixed-sequence fake used by test_woo_source.py: one currency
+    call, then one response per get() call thereafter."""
+
+    def __init__(self, currency: str, responses: list):
+        self._currency = currency
+        self._responses = list(responses)
+        self.requests: list[dict] = []
+
+    def get(self, url, params=None):
+        self.requests.append({"url": url, "params": params})
+        if len(self.requests) == 1:
+            return _FakeWooResponse({"code": self._currency})
+        payload = self._responses.pop(0)
+        return _FakeWooResponse(payload)
+
+
+def test_post_scans_rejects_unknown_source_type(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.post("/scans", data={"scope_type": "full", "source_type": "bogus"})
+
+    assert response.status_code == 400
+
+
+def test_post_scans_csv_source_type_requires_a_file(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.post("/scans", data={"scope_type": "full", "source_type": "csv"})
+
+    assert response.status_code == 400
+
+
+def test_post_scans_shopify_source_type_requires_shop_domain_and_access_token(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/scans",
+        data={"scope_type": "full", "source_type": "shopify", "shop_domain": "shop.myshopify.com"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_post_scans_woocommerce_source_type_requires_store_credentials(tmp_path):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/scans",
+        data={
+            "scope_type": "full", "source_type": "woocommerce",
+            "store_url": "https://example-shop.pl", "consumer_key": "ck_test",
+        },
+    )
+
+    assert response.status_code == 400
+
+
+def test_post_scans_shopify_source_type_builds_scan_from_shopify_api(tmp_path, monkeypatch):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    fake_client = _FakeShopifyClient(
+        currency="PLN",
+        pages=[
+            {
+                "edges": [
+                    {
+                        "node": {
+                            "id": "gid://shopify/Product/1",
+                            "title": "Kubek termiczny",
+                            "productType": "Kuchnia",
+                            "variants": {
+                                "edges": [
+                                    {
+                                        "node": {
+                                            "id": "gid://shopify/ProductVariant/1",
+                                            "title": "Default Title",
+                                            "price": "49.99",
+                                            "barcode": "5901234123457",
+                                        }
+                                    }
+                                ]
+                            },
+                        }
+                    }
+                ],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "app.sources.shopify_source.httpx.Client", lambda *a, **kw: fake_client
+    )
+
+    response = client.post(
+        "/scans",
+        data={
+            "scope_type": "full", "source_type": "shopify",
+            "shop_domain": "test-shop.myshopify.com", "access_token": "tok",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_products"] == 1
+
+
+def test_post_scans_woocommerce_source_type_builds_scan_from_woocommerce_api(tmp_path, monkeypatch):
+    app, store, cache = _make_app(tmp_path)
+    client = TestClient(app)
+    fake_client = _FakeWooClient(
+        currency="PLN",
+        responses=[
+            [
+                {
+                    "id": 1,
+                    "type": "simple",
+                    "name": "Kubek termiczny",
+                    "price": "49.99",
+                    "global_unique_id": "5901234123457",
+                    "categories": [{"id": 9, "name": "Kuchnia", "slug": "kuchnia"}],
+                }
+            ],
+            [],
+        ],
+    )
+    monkeypatch.setattr(
+        "app.sources.woo_source.httpx.Client", lambda *a, **kw: fake_client
+    )
+
+    response = client.post(
+        "/scans",
+        data={
+            "scope_type": "full", "source_type": "woocommerce",
+            "store_url": "https://example-shop.pl", "consumer_key": "ck_test",
+            "consumer_secret": "cs_test",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_products"] == 1

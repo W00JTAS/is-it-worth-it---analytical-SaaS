@@ -6,14 +6,12 @@ from app.scans.estimate import estimate_cost
 from app.scans.sampling import resolve_sample_scope
 from app.scans.staleness import analyze_staleness
 from app.scans.store import ScanStore
-from app.sources.column_mapping import ColumnMapping
-from app.sources.csv_source import CsvCatalogSource
+from app.sources.base import CatalogSource
 
 
 def create_scan(
     *,
-    csv_bytes: bytes,
-    tenant_id: str,
+    source: CatalogSource,
     scope_type: str,
     sample_per_category: int | None,
     sample_seed: int,
@@ -24,9 +22,7 @@ def create_scan(
     store: ScanStore,
     cache: PriceCache,
     provider_name: str,
-    column_mapping: ColumnMapping | None = None,
 ) -> tuple[str, list[str]]:
-    source = CsvCatalogSource(csv_bytes, tenant_id=tenant_id, column_mapping=column_mapping)
     all_products = source.fetch_products()
 
     if scope_type == "sample":

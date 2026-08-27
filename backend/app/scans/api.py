@@ -16,15 +16,19 @@ from app.providers.perplexity import PerplexityProvider
 from app.scans.engine import run_scan
 from app.scans.orchestration import create_scan
 from app.scans.store import ScanStore
+from app.sources.base import CatalogSource
 from app.sources.column_mapping import ColumnMapping, ColumnMappingError
 from app.sources.csv_preview import CsvPreview, build_csv_preview
-from app.sources.csv_source import EmptyCsvError
+from app.sources.csv_source import CsvCatalogSource, EmptyCsvError
+from app.sources.shopify_source import ShopifyCatalogSource
+from app.sources.woo_source import WooCommerceCatalogSource
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 VALID_SCOPE_TYPES = ("full", "sample")
+VALID_SOURCE_TYPES = ("csv", "shopify", "woocommerce")
 
 # Mirrors csv_preview.py's WARNING_LIMIT: a blank-titled Shopify product with
 # many variants now emits one "missing name, skipped" warning per variant
@@ -175,11 +179,70 @@ def _partial_column_mapping_from_form(
     )
 
 
-def _sample_seed_from_csv(csv_bytes: bytes) -> int:
-    # Deterministic per-upload seed derived from the file's actual content (not
-    # just its length) so re-uploading the same file sample the same products;
-    # not security-sensitive, just needs to be stable and content-dependent.
-    return int(hashlib.sha256(csv_bytes).hexdigest()[:8], 16)
+def _sample_seed(seed_material: bytes) -> int:
+    # Deterministic per-request seed derived from stable identifying bytes of
+    # the source being scanned (the uploaded file's content for CSV, the
+    # store's own domain/URL for Shopify/WooCommerce), so repeating the same
+    # request samples the same products; not security-sensitive, just needs
+    # to be stable and content-dependent.
+    return int(hashlib.sha256(seed_material).hexdigest()[:8], 16)
+
+
+def _build_source(
+    source_type: str,
+    tenant_id: str,
+    csv_bytes: bytes | None,
+    column_mapping: ColumnMapping | None,
+    shop_domain: str | None,
+    access_token: str | None,
+    store_url: str | None,
+    consumer_key: str | None,
+    consumer_secret: str | None,
+) -> tuple[CatalogSource, int]:
+    """Builds the `CatalogSource` for `POST /scans` matching `source_type`,
+    plus a `_sample_seed` derived from that source's own stable identifying
+    bytes. Raises `HTTPException(400)` if the credentials `source_type`
+    requires weren't provided -- mirrors `_column_mapping_from_form`'s
+    all-required-or-400 pattern above.
+    """
+    if source_type == "csv":
+        if csv_bytes is None:
+            raise HTTPException(
+                status_code=400, detail="file is required when source_type is 'csv'"
+            )
+        return (
+            CsvCatalogSource(csv_bytes, tenant_id=tenant_id, column_mapping=column_mapping),
+            _sample_seed(csv_bytes),
+        )
+    if source_type == "shopify":
+        if not shop_domain or not access_token:
+            raise HTTPException(
+                status_code=400,
+                detail="shop_domain and access_token are required when source_type is 'shopify'",
+            )
+        return (
+            ShopifyCatalogSource(
+                shop_domain=shop_domain, access_token=access_token, tenant_id=tenant_id,
+            ),
+            _sample_seed(shop_domain.encode()),
+        )
+    # source_type == "woocommerce" -- the only remaining member of
+    # VALID_SOURCE_TYPES, already checked by the caller.
+    if not store_url or not consumer_key or not consumer_secret:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "store_url, consumer_key and consumer_secret are required when "
+                "source_type is 'woocommerce'"
+            ),
+        )
+    return (
+        WooCommerceCatalogSource(
+            store_url=store_url, consumer_key=consumer_key, consumer_secret=consumer_secret,
+            tenant_id=tenant_id,
+        ),
+        _sample_seed(store_url.encode()),
+    )
 
 
 async def _run_scan_and_guard(
@@ -248,7 +311,8 @@ async def post_csv_preview(
 
 @router.post("/scans")
 async def post_scans(
-    file: UploadFile,
+    file: UploadFile | None = None,
+    source_type: str = Form("csv"),
     scope_type: str = Form(...),
     sample_per_category: int | None = Form(None),
     market: str = Form("PL"),
@@ -260,10 +324,20 @@ async def post_scans(
     ean_column: str | None = Form(None),
     category_column: str | None = Form(None),
     sku_column: str | None = Form(None),
+    shop_domain: str | None = Form(None),
+    access_token: str | None = Form(None),
+    store_url: str | None = Form(None),
+    consumer_key: str | None = Form(None),
+    consumer_secret: str | None = Form(None),
     store: ScanStore = Depends(get_store),
     cache: PriceCache = Depends(get_cache),
     provider: PriceProvider = Depends(get_provider),
 ):
+    if source_type not in VALID_SOURCE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"source_type must be one of {VALID_SOURCE_TYPES!r}, got {source_type!r}",
+        )
     if scope_type not in VALID_SCOPE_TYPES:
         raise HTTPException(
             status_code=400,
@@ -292,13 +366,17 @@ async def post_scans(
         name_column, wholesale_price_column, ean_column, category_column, sku_column,
     )
 
-    csv_bytes = await file.read()
+    csv_bytes = await file.read() if file is not None else None
+    source, sample_seed = _build_source(
+        source_type, "default", csv_bytes, column_mapping,
+        shop_domain, access_token, store_url, consumer_key, consumer_secret,
+    )
     try:
         scan_id, warnings = create_scan(
-            csv_bytes=csv_bytes, tenant_id="default", scope_type=scope_type,
-            sample_per_category=sample_per_category, sample_seed=_sample_seed_from_csv(csv_bytes),
+            source=source, scope_type=scope_type,
+            sample_per_category=sample_per_category, sample_seed=sample_seed,
             market=market, max_delivery_days=max_delivery_days, max_concurrency=max_concurrency,
-            staleness_threshold_days=staleness_threshold_days, column_mapping=column_mapping,
+            staleness_threshold_days=staleness_threshold_days,
             store=store, cache=cache, provider_name=provider.name,
         )
     except (EmptyCsvError, ColumnMappingError) as exc:
