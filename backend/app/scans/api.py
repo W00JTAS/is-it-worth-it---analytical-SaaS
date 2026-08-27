@@ -26,6 +26,12 @@ router = APIRouter()
 
 VALID_SCOPE_TYPES = ("full", "sample")
 
+# Mirrors csv_preview.py's WARNING_LIMIT: a blank-titled Shopify product with
+# many variants now emits one "missing name, skipped" warning per variant
+# (see shopify_source.py), which could otherwise grow unbounded into this
+# JSON response.
+WARNING_LIMIT = 20
+
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "app.sqlite3"
 _shared_store: ScanStore | None = None
 _shared_cache: PriceCache | None = None
@@ -300,7 +306,7 @@ async def post_scans(
 
     scan = store.get_scan(scan_id)
     result = _scan_to_dict(scan)
-    result["warnings"] = warnings
+    result["warnings"] = warnings[:WARNING_LIMIT]
     return result
 
 

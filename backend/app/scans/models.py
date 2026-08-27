@@ -37,7 +37,7 @@ class StalenessReport:
     # is not guaranteed unique across a scan's products, so joining staleness
     # back onto products by external_id could flag the wrong product as stale.
     # EAN *is* guaranteed unique within one scan's product list, since
-    # CsvCatalogSource already deduplicates by EAN at parse time.
+    # BaseCatalogSource already deduplicates by EAN at parse time.
     stale_eans: tuple[str, ...]
 
 

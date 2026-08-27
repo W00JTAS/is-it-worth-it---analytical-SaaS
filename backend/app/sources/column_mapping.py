@@ -13,7 +13,7 @@ EAN_ALIASES = ("kod ean", "kod kreskowy", "ean", "barcode", "gtin")
 CATEGORY_ALIASES = ("grupa produktowa", "kategoria", "category", "grupa")
 # Supplier's stable product identifier. Optional -- unlike the four aliases
 # above, a missing SKU column is not an error; callers fall back to the CSV
-# row index (see CsvCatalogSource.fetch_products).
+# row index (see BaseCatalogSource.fetch_products).
 SKU_ALIASES = ("sku", "kod sku", "symbol")
 
 
