@@ -65,7 +65,7 @@ def test_maps_simple_product():
                     "name": "Kubek termiczny",
                     "price": "49.99",
                     "global_unique_id": "5901234123457",
-                    "categories": ["Kuchnia"],
+                    "categories": [{"id": 9, "name": "Kuchnia", "slug": "kuchnia"}],
                 }
             ],
             [],
@@ -99,7 +99,10 @@ def test_flattens_multiple_categories_to_first_one():
                     "name": "Koszulka",
                     "price": "39.99",
                     "global_unique_id": "",
-                    "categories": ["Odzież", "Męska"],
+                    "categories": [
+                        {"id": 12, "name": "Odzież", "slug": "odziez"},
+                        {"id": 13, "name": "Męska", "slug": "meska"},
+                    ],
                 }
             ],
             [],
@@ -121,7 +124,7 @@ def test_maps_variable_product_with_variations():
                     "id": 3,
                     "type": "variable",
                     "name": "Koszulka",
-                    "categories": ["Odzież"],
+                    "categories": [{"id": 12, "name": "Odzież", "slug": "odziez"}],
                 }
             ],
             [
@@ -276,7 +279,8 @@ def test_dedups_same_ean_across_variations_keeping_cheaper_price():
     client = _FakeClient(
         currency="PLN",
         responses=[
-            [{"id": 11, "type": "variable", "name": "Kubek", "categories": ["Kuchnia"]}],
+            [{"id": 11, "type": "variable", "name": "Kubek",
+              "categories": [{"id": 9, "name": "Kuchnia", "slug": "kuchnia"}]}],
             [
                 {
                     "id": 110,
@@ -303,6 +307,33 @@ def test_dedups_same_ean_across_variations_keeping_cheaper_price():
     assert products[0].wholesale_price == Decimal("39.99")
     assert products[0].variant_id == "111"
     assert any("duplicate EAN" in w for w in source.warnings)
+
+
+def test_raises_woocommerce_api_error_when_pagination_never_terminates():
+    # A page number that never comes back empty (e.g. a caching proxy or CDN
+    # that strips/ignores the `page` query param and always serves page 1)
+    # must not hang the fetch or grow `products` without bound.
+    class _StuckPageClient:
+        def get(self, url, params=None):
+            if "currencies" in url:
+                return _FakeResponse({"code": "PLN"})
+            return _FakeResponse(
+                [
+                    {
+                        "id": 1,
+                        "type": "simple",
+                        "name": "Produkt",
+                        "price": "10.00",
+                        "global_unique_id": "",
+                        "categories": [],
+                    }
+                ]
+            )
+
+    source = _make_source(_StuckPageClient())
+
+    with pytest.raises(WooCommerceApiError, match="did not terminate"):
+        source.fetch_products()
 
 
 class _RaisingStatusClient:
@@ -376,6 +407,39 @@ def test_raises_woocommerce_api_error_on_malformed_currency_response():
             return _FakeResponse({"unexpected": "shape"})
 
     source = _make_source(_BadCurrencyClient())
+
+    with pytest.raises(WooCommerceApiError):
+        source.fetch_products()
+
+
+def test_raises_woocommerce_api_error_on_product_missing_id():
+    client = _FakeClient(
+        currency="PLN",
+        responses=[[{"type": "simple", "name": "Produkt bez id", "price": "10.00"}]],
+    )
+    source = _make_source(client)
+
+    with pytest.raises(WooCommerceApiError):
+        source.fetch_products()
+
+
+def test_raises_woocommerce_api_error_on_non_object_items_in_products_page():
+    client = _FakeClient(currency="PLN", responses=[["not-a-product-object"]])
+    source = _make_source(client)
+
+    with pytest.raises(WooCommerceApiError):
+        source.fetch_products()
+
+
+def test_raises_woocommerce_api_error_on_variation_missing_id():
+    client = _FakeClient(
+        currency="PLN",
+        responses=[
+            [{"id": 12, "type": "variable", "name": "Produkt", "categories": []}],
+            [{"price": "10.00", "attributes": []}],
+        ],
+    )
+    source = _make_source(client)
 
     with pytest.raises(WooCommerceApiError):
         source.fetch_products()

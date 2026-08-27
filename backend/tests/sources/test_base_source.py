@@ -175,3 +175,22 @@ def test_items_without_ean_are_never_deduped():
     )
     products = source.fetch_products()
     assert len(products) == 2
+
+
+def test_rawitem_rejects_non_string_category():
+    # A source that passes a raw vendor object (e.g. a WooCommerce
+    # {"id": 9, "name": "Kuchnia"} category dict) instead of a plain string
+    # must fail at construction, not with an opaque AttributeError deep
+    # inside _normalize's .strip() call.
+    with pytest.raises(TypeError):
+        _item(raw_category={"id": 9, "name": "Kuchnia"})
+
+
+def test_rawitem_rejects_non_string_variant_id():
+    with pytest.raises(TypeError):
+        _item(variant_id=123)
+
+
+def test_rawitem_allows_none_variant_id():
+    item = _item(variant_id=None)
+    assert item.variant_id is None

@@ -15,6 +15,17 @@ class CatalogSource(Protocol):
         ...
 
 
+_STRING_FIELDS = (
+    "label",
+    "external_id",
+    "name",
+    "raw_price",
+    "raw_ean",
+    "raw_category",
+    "currency",
+)
+
+
 @dataclass
 class RawItem:
     label: str
@@ -25,6 +36,22 @@ class RawItem:
     raw_ean: str
     raw_category: str
     currency: str
+
+    def __post_init__(self) -> None:
+        # A source mapping a vendor's raw JSON must pass every field through
+        # as a string -- BaseCatalogSource owns all parsing/validation. A
+        # vendor field whose real shape is an object (e.g. WooCommerce's
+        # `categories: [{"id": 9, "name": "..."}]`) silently produces a dict
+        # here otherwise, surfacing later as an opaque AttributeError deep
+        # inside `_normalize`'s `.strip()` call instead of at the source.
+        for field_name in _STRING_FIELDS:
+            value = getattr(self, field_name)
+            if not isinstance(value, str):
+                raise TypeError(f"RawItem.{field_name} must be str, got {type(value).__name__}")
+        if self.variant_id is not None and not isinstance(self.variant_id, str):
+            raise TypeError(
+                f"RawItem.variant_id must be str or None, got {type(self.variant_id).__name__}"
+            )
 
 
 class BaseCatalogSource(ABC):

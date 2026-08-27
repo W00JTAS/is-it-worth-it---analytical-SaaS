@@ -9,6 +9,14 @@ from app.sources.base import BaseCatalogSource, RawItem
 
 DEFAULT_PER_PAGE = 100
 
+# Pagination advances by incrementing `page` until an empty page comes back.
+# Unlike Shopify's cursor (which can be checked for "did it actually move"),
+# a page number always "advances" even if the server ignores it (a caching
+# proxy or CDN serving a stale page 1 forever). This cap is the
+# mechanism-independent fallback: it bounds the damage instead of detecting
+# the stall directly.
+MAX_PAGES = 10_000
+
 
 class WooCommerceApiError(Exception):
     pass
@@ -46,6 +54,11 @@ class WooCommerceCatalogSource(BaseCatalogSource):
     def _paginate(self, path: str) -> Iterable[dict[str, Any]]:
         page = 1
         while True:
+            if page > MAX_PAGES:
+                raise WooCommerceApiError(
+                    f"WooCommerce pagination for {path} did not terminate within "
+                    f"{MAX_PAGES} pages"
+                )
             items = self._get(path, {"page": page, "per_page": self.per_page})
             if not isinstance(items, list):
                 raise WooCommerceApiError(
@@ -70,11 +83,16 @@ class WooCommerceCatalogSource(BaseCatalogSource):
             yield from self._map_product(product, currency)
 
     def _map_product(self, product: dict[str, Any], currency: str) -> Iterable[RawItem]:
-        product_id = product["id"]
-        product_type = product.get("type")
-        name = product.get("name") or ""
-        categories = product.get("categories") or []
-        category = categories[0] if categories else ""
+        try:
+            product_id = product["id"]
+            product_type = product.get("type")
+            name = product.get("name") or ""
+            categories = product.get("categories") or []
+            category = (categories[0].get("name") or "") if categories else ""
+        except (KeyError, AttributeError, TypeError) as exc:
+            raise WooCommerceApiError(
+                f"WooCommerce product response had an unexpected shape: {exc}"
+            ) from exc
 
         if product_type == "simple":
             yield RawItem(
@@ -103,7 +121,12 @@ class WooCommerceCatalogSource(BaseCatalogSource):
         category: str,
         currency: str,
     ) -> RawItem:
-        variation_id = variation["id"]
+        try:
+            variation_id = variation["id"]
+        except (KeyError, TypeError) as exc:
+            raise WooCommerceApiError(
+                f"WooCommerce variation response had an unexpected shape: {exc}"
+            ) from exc
 
         # A blank product name composed with a non-blank attribute suffix
         # would still look non-blank (e.g. "- Rozmiar: S"), silently
