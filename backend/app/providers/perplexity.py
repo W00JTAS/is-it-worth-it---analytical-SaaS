@@ -2,36 +2,18 @@ from __future__ import annotations
 
 import json
 import logging
-import math
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
 
 from app.models.product import Product
 from app.providers.base import OfferResult, ProviderUnavailable
+from app.providers.parsing import RESPONSE_SCHEMA, validate_offer_fields
 
 API_URL = "https://api.perplexity.ai/chat/completions"
 MODEL = "sonar"
 
 logger = logging.getLogger(__name__)
-
-RESPONSE_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "found": {"type": "boolean"},
-        "price": {"type": "number"},
-        "currency": {"type": "string"},
-        "seller": {"type": "string"},
-        "source_url": {"type": "string"},
-        "delivery_days": {"type": "integer"},
-        "confidence": {"type": "number"},
-    },
-    "required": [
-        "found", "price", "currency", "seller",
-        "source_url", "delivery_days", "confidence",
-    ],
-}
 
 
 class PerplexityProvider:
@@ -104,53 +86,13 @@ class PerplexityProvider:
         except (KeyError, IndexError, TypeError, json.JSONDecodeError):
             return None
 
-        if not isinstance(parsed, dict) or not parsed.get("found"):
-            return None
-
-        source_url = parsed.get("source_url")
-        if not source_url:
-            return None
-
-        currency = parsed.get("currency", "PLN")
-        if not isinstance(currency, str) or not currency:
-            return None
-
-        delivery_days = parsed.get("delivery_days")
-        if (
-            not isinstance(delivery_days, int)
-            or isinstance(delivery_days, bool)
-            or delivery_days < 0
-            or delivery_days > max_delivery_days
-        ):
-            return None
-
-        try:
-            price = Decimal(str(parsed["price"]))
-        except (InvalidOperation, KeyError, TypeError):
-            return None
-        if not price.is_finite() or price <= 0:
-            return None
-
-        try:
-            confidence = float(parsed.get("confidence", 0.0))
-        except (ValueError, TypeError):
-            return None
-        if not math.isfinite(confidence) or not (0.0 <= confidence <= 1.0):
-            return None
-
         raw_citations = response_json.get("citations") or []
         if isinstance(raw_citations, list):
             citations = tuple(c for c in raw_citations if isinstance(c, str))
         else:
             citations = ()
 
-        return OfferResult(
-            price=price,
-            currency=currency,
-            seller=parsed.get("seller", "unknown"),
-            source_url=source_url,
-            delivery_days=delivery_days,
-            confidence=confidence,
-            citations=citations,
-            raw_response=raw_response,
+        return validate_offer_fields(
+            parsed, raw_response=raw_response, citations=citations,
+            max_delivery_days=max_delivery_days,
         )
