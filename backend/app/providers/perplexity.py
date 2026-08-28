@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import logging
+from decimal import Decimal
 from typing import Any
 
 import httpx
 
 from app.models.product import Product
-from app.providers.base import OfferResult, ProviderUnavailable
+from app.providers.base import OfferResult, ProviderProfile, ProviderUnavailable
 from app.providers.parsing import RESPONSE_SCHEMA, validate_offer_fields
 
 API_URL = "https://api.perplexity.ai/chat/completions"
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class PerplexityProvider:
     name = "perplexity"
+    profile = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
 
     def __init__(
         self,
