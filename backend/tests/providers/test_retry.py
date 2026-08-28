@@ -64,14 +64,17 @@ def test_retries_429_then_succeeds(monkeypatch):
 
 def test_raises_provider_rate_limited_after_exhausting_attempts(monkeypatch):
     monkeypatch.setattr("app.providers.retry.time.sleep", lambda *_: None)
+    calls = []
 
     def send():
+        calls.append(1)
         return _response(429, headers={"Retry-After": "12"})
 
     with pytest.raises(ProviderRateLimited) as exc_info:
         call_with_retry(send)
 
     assert exc_info.value.retry_after == 12.0
+    assert len(calls) == 4  # exactly MAX_ATTEMPTS, no more, no fewer
 
 
 def test_retries_5xx_then_succeeds(monkeypatch):
@@ -117,9 +120,13 @@ def test_retries_transport_error_then_succeeds(monkeypatch):
 
 def test_reraises_transport_error_after_exhausting_attempts(monkeypatch):
     monkeypatch.setattr("app.providers.retry.time.sleep", lambda *_: None)
+    attempts = {"n": 0}
 
     def send():
+        attempts["n"] += 1
         raise httpx.ConnectError("connection refused")
 
     with pytest.raises(httpx.ConnectError):
         call_with_retry(send)
+
+    assert attempts["n"] == 4  # exactly MAX_ATTEMPTS, no more, no fewer
