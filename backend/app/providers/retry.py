@@ -23,9 +23,13 @@ def call_with_retry(send: Callable[[], httpx.Response]) -> httpx.Response:
       never gets better by waiting, and retrying it once per product across
       a 17,500-product scan would waste the whole attempt budget on a
       failure the first response already fully diagnosed.
-    - 429 or 5xx -> retried with exponential backoff + jitter, honouring a
-      `Retry-After` response header when present. Exhausting all attempts
-      raises ProviderRateLimited carrying the last-seen `Retry-After`.
+    - 413, 429, or 5xx -> retried with exponential backoff + jitter, honouring
+      a `Retry-After` response header when present. Exhausting all attempts
+      raises ProviderRateLimited carrying the last-seen `Retry-After`. 413 is
+      grouped here deliberately: observed live against Groq's compound-mini,
+      an identical, correctly-sized request that got a 413 succeeded moments
+      later unchanged — a transiently overloaded backend, not a genuine
+      oversized-payload client error.
     - any other non-2xx -> treated as permanent; raises the response's own
       `httpx.HTTPStatusError` via `raise_for_status()`, not retried.
     - transport-level errors (ConnectError, ReadTimeout, ...) are retried
@@ -45,7 +49,7 @@ def call_with_retry(send: Callable[[], httpx.Response]) -> httpx.Response:
         if response.status_code in (401, 403):
             raise ProviderAuthError(f"provider rejected credentials: HTTP {response.status_code}")
 
-        if response.status_code == 429 or response.status_code >= 500:
+        if response.status_code in (413, 429) or response.status_code >= 500:
             last_retry_after = _parse_retry_after(response)
             if attempt == MAX_ATTEMPTS:
                 raise ProviderRateLimited(

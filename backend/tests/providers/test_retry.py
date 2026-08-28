@@ -89,6 +89,38 @@ def test_retries_5xx_then_succeeds(monkeypatch):
     assert response.status_code == 200
 
 
+def test_retries_413_then_succeeds(monkeypatch):
+    # Observed live against Groq's compound-mini: an identical, correctly-sized
+    # request (453 bytes) that got a 413 succeeded moments later unchanged —
+    # this is the provider's backend being transiently overloaded, not a
+    # genuine "your payload is too large" client error. Must be retried like
+    # 429/5xx, not treated as a permanent 4xx.
+    monkeypatch.setattr("app.providers.retry.time.sleep", lambda *_: None)
+    responses = [_response(413), _response(200)]
+
+    def send():
+        return responses.pop(0)
+
+    response = call_with_retry(send)
+
+    assert response.status_code == 200
+    assert responses == []
+
+
+def test_raises_provider_rate_limited_after_exhausting_413_attempts(monkeypatch):
+    monkeypatch.setattr("app.providers.retry.time.sleep", lambda *_: None)
+    calls = []
+
+    def send():
+        calls.append(1)
+        return _response(413)
+
+    with pytest.raises(ProviderRateLimited):
+        call_with_retry(send)
+
+    assert len(calls) == 4  # exactly MAX_ATTEMPTS, no more, no fewer
+
+
 def test_raises_http_status_error_on_permanent_4xx_without_retry():
     calls = []
 
