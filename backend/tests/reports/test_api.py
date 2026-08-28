@@ -4,11 +4,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.models.product import Product
-from app.providers.base import OfferResult
+from app.providers.base import OfferResult, ProviderProfile
 from app.reports.api import router
 from app.scans.api import get_store
 from app.scans.estimate import estimate_cost
 from app.scans.store import ScanStore
+
+PROFILE = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
 
 COST_PARAMS = {
     "commission_pct": "0.10", "shipping_cost": "15.00",
@@ -35,7 +37,7 @@ def _make_product(**overrides) -> Product:
 
 
 def _seed_done_scan(store: ScanStore, *, offer_price=Decimal("100.00")) -> str:
-    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5, profile=PROFILE)
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
@@ -82,7 +84,7 @@ def test_report_summary_404_for_unknown_scan(tmp_path):
 def test_report_summary_400_when_scan_not_terminal(tmp_path):
     app, store = _make_app(tmp_path)
     client = TestClient(app)
-    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5, profile=PROFILE)
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,

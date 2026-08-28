@@ -412,7 +412,7 @@ async def post_scans(
             sample_per_category=sample_per_category, sample_seed=sample_seed,
             market=market, max_delivery_days=max_delivery_days, max_concurrency=max_concurrency,
             staleness_threshold_days=staleness_threshold_days,
-            store=store, cache=cache, provider_name=provider.name,
+            store=store, cache=cache, provider=provider,
         )
     except (EmptyCsvError, ColumnMappingError, ShopifyApiError, WooCommerceApiError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

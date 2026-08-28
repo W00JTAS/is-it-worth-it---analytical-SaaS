@@ -6,11 +6,13 @@ import pytest
 
 from app.cache.sqlite_cache import PriceCache
 from app.models.product import Product
-from app.providers.base import OfferResult, ProviderUnavailable
+from app.providers.base import OfferResult, ProviderProfile, ProviderUnavailable
 from app.scans.engine import run_scan
 from app.scans.estimate import estimate_cost
 from app.scans.models import ProductStatus, ScanStatus
 from app.scans.store import ScanStore
+
+PROFILE = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
 
 
 def _make_product(**overrides) -> Product:
@@ -66,7 +68,9 @@ class _ScriptedProvider:
 
 def _make_store_with_products(tmp_path, products, *, max_concurrency=5):
     store = ScanStore(tmp_path / "app.sqlite3")
-    estimate = estimate_cost(cache_misses=len(products), stale_count=0, max_concurrency=max_concurrency)
+    estimate = estimate_cost(
+        cache_misses=len(products), stale_count=0, max_concurrency=max_concurrency, profile=PROFILE
+    )
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=max_concurrency, staleness_threshold_days=14,

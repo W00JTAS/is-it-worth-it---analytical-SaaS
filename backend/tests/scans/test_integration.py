@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.cache.sqlite_cache import PriceCache
-from app.providers.base import OfferResult
+from app.providers.base import OfferResult, ProviderProfile
 from app.scans.api import get_cache, get_provider, get_store, router
 from app.scans.store import ScanStore
 
@@ -56,6 +56,7 @@ def _make_offer(**overrides) -> OfferResult:
 
 class _CountingProvider:
     name = PROVIDER_NAME
+    profile = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
 
     def __init__(self):
         self.call_count = 0

@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 
 from app.cache.sqlite_cache import PriceCache
-from app.providers.base import OfferResult
+from app.providers.base import OfferResult, ProviderProfile
 from app.scans.models import ScanStatus
 from app.scans.orchestration import create_scan
 from app.scans.store import ScanStore
@@ -27,6 +27,11 @@ def _make_offer(**overrides) -> OfferResult:
     return OfferResult(**defaults)
 
 
+class _FakeProvider:
+    name = "perplexity"
+    profile = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
+
+
 def test_create_scan_full_scope_persists_all_products_and_estimates_cost(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     cache = PriceCache(tmp_path / "app.sqlite3")
@@ -35,7 +40,7 @@ def test_create_scan_full_scope_persists_all_products_and_estimates_cost(tmp_pat
         source=CsvCatalogSource(CSV_BYTES, tenant_id="t1"), scope_type="full",
         sample_per_category=None, sample_seed=1, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14, store=store, cache=cache,
-        provider_name="perplexity",
+        provider=_FakeProvider(),
     )
 
     scan = store.get_scan(scan_id)
@@ -56,7 +61,7 @@ def test_create_scan_detects_overlap_and_staleness_against_existing_cache(tmp_pa
         source=CsvCatalogSource(CSV_BYTES, tenant_id="t1"), scope_type="full",
         sample_per_category=None, sample_seed=1, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14, store=store, cache=cache,
-        provider_name="perplexity",
+        provider=_FakeProvider(),
     )
 
     scan = store.get_scan(scan_id)
@@ -78,7 +83,7 @@ def test_create_scan_sample_scope_applies_water_filling(tmp_path):
         source=CsvCatalogSource(CSV_BYTES, tenant_id="t1"), scope_type="sample",
         sample_per_category=1, sample_seed=1, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14, store=store, cache=cache,
-        provider_name="perplexity",
+        provider=_FakeProvider(),
     )
 
     scan = store.get_scan(scan_id)
@@ -101,7 +106,7 @@ def test_create_scan_sample_scope_without_sample_per_category_raises(tmp_path):
             source=CsvCatalogSource(CSV_BYTES, tenant_id="t1"), scope_type="sample",
             sample_per_category=None, sample_seed=1, market="PL", max_delivery_days=5,
             max_concurrency=5, staleness_threshold_days=14, store=store, cache=cache,
-            provider_name="perplexity",
+            provider=_FakeProvider(),
         )
     store.close()
     cache.close()
@@ -123,7 +128,7 @@ def test_create_scan_surfaces_csv_parse_warnings(tmp_path):
         source=CsvCatalogSource(csv_bytes, tenant_id="t1"), scope_type="full",
         sample_per_category=None, sample_seed=1, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14, store=store, cache=cache,
-        provider_name="perplexity",
+        provider=_FakeProvider(),
     )
 
     assert len(warnings) == 1

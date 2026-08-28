@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.cache.sqlite_cache import PriceCache
 from app.normalize.grouping import group_by_category
+from app.providers.base import PriceProvider
 from app.scans.estimate import estimate_cost
 from app.scans.sampling import resolve_sample_scope
 from app.scans.staleness import analyze_staleness
@@ -21,7 +22,7 @@ def create_scan(
     staleness_threshold_days: int,
     store: ScanStore,
     cache: PriceCache,
-    provider_name: str,
+    provider: PriceProvider,
 ) -> tuple[str, list[str]]:
     all_products = source.fetch_products()
 
@@ -40,18 +41,19 @@ def create_scan(
         scoped_products = all_products
 
     staleness = analyze_staleness(
-        scoped_products, cache, market, provider_name, max_delivery_days,
+        scoped_products, cache, market, provider.name, max_delivery_days,
         staleness_threshold_days,
     )
 
     cache_misses = sum(
         1 for p in scoped_products
-        if p.ean is None or cache.get(p.ean, market, provider_name, max_delivery_days) is None
+        if p.ean is None or cache.get(p.ean, market, provider.name, max_delivery_days) is None
     )
     estimate = estimate_cost(
         cache_misses=cache_misses,
         stale_count=len(staleness.stale_eans),
         max_concurrency=max_concurrency,
+        profile=provider.profile,
     )
 
     scan_id = store.create_scan(

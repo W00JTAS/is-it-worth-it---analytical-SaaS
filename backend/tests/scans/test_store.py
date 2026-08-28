@@ -2,10 +2,12 @@ from dataclasses import replace
 from decimal import Decimal
 
 from app.models.product import Product
-from app.providers.base import OfferResult
+from app.providers.base import OfferResult, ProviderProfile
 from app.scans.estimate import estimate_cost
 from app.scans.models import ProductStatus, ScanStatus
 from app.scans.store import ScanStore
+
+PROFILE = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
 
 
 def _make_product(**overrides) -> Product:
@@ -32,7 +34,7 @@ def _make_offer(**overrides) -> OfferResult:
 def test_create_scan_persists_scan_and_products(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     products = [_make_product(external_id="1"), _make_product(external_id="2", ean=None)]
-    estimate = estimate_cost(cache_misses=2, stale_count=0, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=2, stale_count=0, max_concurrency=5, profile=PROFILE)
 
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
@@ -61,7 +63,7 @@ def test_stale_products_are_flagged_on_creation(tmp_path):
         _make_product(external_id="1", ean="5901234123457"),
         _make_product(external_id="2", ean="5900000000107"),
     ]
-    estimate = estimate_cost(cache_misses=1, stale_count=1, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=1, stale_count=1, max_concurrency=5, profile=PROFILE)
 
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
@@ -95,7 +97,7 @@ def test_was_stale_is_keyed_by_ean_not_external_id(tmp_path):
         _make_product(external_id="dup", ean="5901234123457"),
         _make_product(external_id="dup", ean="5900000000107"),
     ]
-    estimate = estimate_cost(cache_misses=1, stale_count=1, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=1, stale_count=1, max_concurrency=5, profile=PROFILE)
 
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
@@ -118,7 +120,7 @@ def test_get_scan_returns_none_for_unknown_id(tmp_path):
 
 def test_start_scan_sets_status_running(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
-    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5, profile=PROFILE)
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
@@ -134,7 +136,7 @@ def test_start_scan_sets_status_running(tmp_path):
 
 def test_mark_done_updates_status_offer_and_progress_count(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
-    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5, profile=PROFILE)
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
@@ -153,7 +155,7 @@ def test_mark_done_updates_status_offer_and_progress_count(tmp_path):
 
 def test_finalize_scan_is_done_when_nothing_pending(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
-    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5, profile=PROFILE)
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
@@ -170,7 +172,7 @@ def test_finalize_scan_is_done_when_nothing_pending(tmp_path):
 
 def test_finalize_scan_is_failed_when_products_still_pending(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
-    estimate = estimate_cost(cache_misses=2, stale_count=0, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=2, stale_count=0, max_concurrency=5, profile=PROFILE)
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
@@ -190,7 +192,7 @@ def test_finalize_scan_is_failed_when_products_still_pending(tmp_path):
 def test_list_all_returns_both_pending_and_done_records_with_offer(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     products = [_make_product(external_id="1"), _make_product(external_id="2")]
-    estimate = estimate_cost(cache_misses=2, stale_count=0, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=2, stale_count=0, max_concurrency=5, profile=PROFILE)
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,
@@ -221,7 +223,7 @@ def test_list_all_returns_both_pending_and_done_records_with_offer(tmp_path):
 def test_list_all_reads_a_negative_result_offer_as_none(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     products = [_make_product(external_id="1")]
-    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5)
+    estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5, profile=PROFILE)
     scan_id = store.create_scan(
         scope_type="full", sample_per_category=None, market="PL", max_delivery_days=5,
         max_concurrency=5, staleness_threshold_days=14,

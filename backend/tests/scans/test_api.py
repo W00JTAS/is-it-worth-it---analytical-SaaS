@@ -11,7 +11,7 @@ from starlette.background import BackgroundTasks
 
 import app.scans.api as api_module
 from app.cache.sqlite_cache import PriceCache
-from app.providers.base import OfferResult
+from app.providers.base import OfferResult, ProviderProfile
 from app.scans.api import (
     StartScanRequest,
     _build_source,
@@ -32,6 +32,7 @@ CSV_BYTES = (
 
 class _FakeProvider:
     name = "perplexity"
+    profile = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
 
     def __init__(self):
         self.call_count = 0
@@ -51,6 +52,7 @@ class _BuggyProvider:
     silently and doesn't leave the scan stuck in RUNNING forever."""
 
     name = "perplexity"
+    profile = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
 
     def find_cheapest(self, product, market, max_delivery_days):
         raise RuntimeError("boom: simulated genuine bug, not a transient failure")
