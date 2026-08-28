@@ -213,6 +213,14 @@ class ScanStore:
             )
             self._conn.commit()
 
+    def pause_scan(self, scan_id: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE scans SET status = ? WHERE id = ?",
+                (ScanStatus.PAUSED.value, scan_id),
+            )
+            self._conn.commit()
+
     def finalize_scan(self, scan_id: str) -> None:
         with self._lock:
             remaining = self._conn.execute(

@@ -6,7 +6,13 @@ import pytest
 
 from app.cache.sqlite_cache import PriceCache
 from app.models.product import Product
-from app.providers.base import OfferResult, ProviderProfile, ProviderUnavailable
+from app.providers.base import (
+    OfferResult,
+    ProviderAuthError,
+    ProviderProfile,
+    ProviderRateLimited,
+    ProviderUnavailable,
+)
 from app.scans.engine import run_scan
 from app.scans.estimate import estimate_cost
 from app.scans.models import ProductStatus, ScanStatus
@@ -161,5 +167,60 @@ def test_run_scan_never_exceeds_max_concurrency(tmp_path):
 
     assert provider.max_in_flight <= 3
     assert store.get_scan(scan_id).status == ScanStatus.DONE
+    store.close()
+    cache.close()
+
+
+def test_run_scan_pauses_without_failing_when_rate_limited(tmp_path):
+    products = [
+        _make_product(external_id="1", ean="5901234123457"),
+        _make_product(external_id="2", ean="5900000000009"),
+    ]
+    store, scan_id = _make_store_with_products(tmp_path, products)
+    cache = PriceCache(tmp_path / "app.sqlite3")
+    provider = _ScriptedProvider({
+        "5901234123457": ProviderRateLimited("rate limited", retry_after=60.0),
+        "5900000000009": ProviderRateLimited("rate limited", retry_after=60.0),
+    })
+
+    asyncio.run(run_scan(scan_id, store, cache, provider, "PL", 5, max_concurrency=5))
+
+    assert store.get_scan(scan_id).status == ScanStatus.PAUSED
+    assert len(store.list_pending(scan_id)) == 2  # both records stay pending, not failed
+    store.close()
+    cache.close()
+
+
+def test_run_scan_can_resume_a_paused_scan_after_budget_recovers(tmp_path):
+    products = [_make_product(external_id="1", ean="5901234123457")]
+    store, scan_id = _make_store_with_products(tmp_path, products)
+    cache = PriceCache(tmp_path / "app.sqlite3")
+    limited_provider = _ScriptedProvider({"5901234123457": ProviderRateLimited("rate limited")})
+    asyncio.run(run_scan(scan_id, store, cache, limited_provider, "PL", 5, max_concurrency=5))
+    assert store.get_scan(scan_id).status == ScanStatus.PAUSED
+
+    recovered_provider = _ScriptedProvider({"5901234123457": _make_offer()})
+    asyncio.run(run_scan(scan_id, store, cache, recovered_provider, "PL", 5, max_concurrency=5))
+
+    assert store.get_scan(scan_id).status == ScanStatus.DONE
+    store.close()
+    cache.close()
+
+
+def test_run_scan_fails_fast_on_auth_error_without_retrying_every_product(tmp_path):
+    products = [
+        _make_product(external_id="1", ean="5901234123457"),
+        _make_product(external_id="2", ean="5900000000009"),
+    ]
+    store, scan_id = _make_store_with_products(tmp_path, products)
+    cache = PriceCache(tmp_path / "app.sqlite3")
+    provider = _ScriptedProvider({
+        "5901234123457": ProviderAuthError("bad key"),
+        "5900000000009": ProviderAuthError("bad key"),
+    })
+
+    asyncio.run(run_scan(scan_id, store, cache, provider, "PL", 5, max_concurrency=5))
+
+    assert store.get_scan(scan_id).status == ScanStatus.FAILED
     store.close()
     cache.close()

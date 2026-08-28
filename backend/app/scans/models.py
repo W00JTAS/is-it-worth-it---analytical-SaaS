@@ -11,6 +11,7 @@ from app.providers.base import OfferResult
 class ScanStatus(str, Enum):
     ESTIMATED = "estimated"
     RUNNING = "running"
+    PAUSED = "paused"
     DONE = "done"
     FAILED = "failed"
 
