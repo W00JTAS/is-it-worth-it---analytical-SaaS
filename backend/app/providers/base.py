@@ -65,6 +65,11 @@ class ProviderAuthError(Exception):
     never helps, and every other in-flight call for this scan will fail
     identically, so run_scan must abort the scan immediately instead of
     leaving 17,500 products cycling through retries one at a time.
+
+    Only guaranteed for providers whose HTTP calls route through
+    app.providers.retry.call_with_retry (currently GroqProvider only) —
+    PerplexityProvider still classifies every non-2xx as ProviderUnavailable
+    and cannot raise this.
     """
 
 
