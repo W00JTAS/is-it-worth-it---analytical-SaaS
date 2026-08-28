@@ -73,7 +73,7 @@ def _parse_retry_after(response: httpx.Response) -> float | None:
 
 def _sleep_backoff(attempt: int, retry_after: float | None = None) -> None:
     if retry_after is not None:
-        time.sleep(retry_after)
+        time.sleep(min(retry_after, MAX_DELAY_SECONDS))
         return
     delay = min(BASE_DELAY_SECONDS * (2 ** (attempt - 1)), MAX_DELAY_SECONDS)
     time.sleep(delay + random.uniform(0, delay * 0.25))

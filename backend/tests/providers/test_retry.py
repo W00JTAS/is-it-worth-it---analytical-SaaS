@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from app.providers.base import ProviderAuthError, ProviderRateLimited
-from app.providers.retry import call_with_retry
+from app.providers.retry import MAX_DELAY_SECONDS, call_with_retry
 
 
 def _response(status_code: int, headers: dict | None = None) -> httpx.Response:
@@ -130,3 +130,17 @@ def test_reraises_transport_error_after_exhausting_attempts(monkeypatch):
         call_with_retry(send)
 
     assert attempts["n"] == 4  # exactly MAX_ATTEMPTS, no more, no fewer
+
+
+def test_retry_after_is_capped_at_max_delay_seconds(monkeypatch):
+    slept_durations = []
+    monkeypatch.setattr("app.providers.retry.time.sleep", lambda seconds: slept_durations.append(seconds))
+
+    def send():
+        return _response(429, headers={"Retry-After": "3600"})  # 1 hour, way over any sane cap
+
+    with pytest.raises(ProviderRateLimited):
+        call_with_retry(send)
+
+    assert all(d <= MAX_DELAY_SECONDS for d in slept_durations)
+    assert len(slept_durations) == 3  # 3 sleeps between 4 attempts
