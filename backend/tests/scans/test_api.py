@@ -70,6 +70,28 @@ def _make_app(tmp_path, provider=None):
     return app, store, cache
 
 
+def test_get_provider_selects_groq_from_env_var(monkeypatch):
+    monkeypatch.setenv("PROVIDER", "groq")
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
+    api_module._shared_provider = None  # reset the module singleton
+
+    provider = api_module.get_provider()
+
+    assert provider.name == "groq"
+    api_module._shared_provider = None  # leave a clean slate for later tests
+
+
+def test_get_provider_defaults_to_perplexity_when_provider_env_unset(monkeypatch):
+    monkeypatch.delenv("PROVIDER", raising=False)
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "test-perplexity-key")
+    api_module._shared_provider = None
+
+    provider = api_module.get_provider()
+
+    assert provider.name == "perplexity"
+    api_module._shared_provider = None
+
+
 def test_post_scans_creates_an_estimated_scan_without_starting_it(tmp_path):
     app, store, cache = _make_app(tmp_path)
     client = TestClient(app)

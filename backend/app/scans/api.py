@@ -78,7 +78,12 @@ def get_provider() -> PriceProvider:
     global _shared_provider
     if _shared_provider is None:
         import os
-        _shared_provider = PerplexityProvider(api_key=os.environ["PERPLEXITY_API_KEY"])
+        provider_name = os.environ.get("PROVIDER", "perplexity")
+        if provider_name == "groq":
+            from app.providers.groq import GroqProvider
+            _shared_provider = GroqProvider(api_key=os.environ["GROQ_API_KEY"])
+        else:
+            _shared_provider = PerplexityProvider(api_key=os.environ["PERPLEXITY_API_KEY"])
     return _shared_provider
 
 
