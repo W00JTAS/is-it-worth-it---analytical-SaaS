@@ -1,4 +1,4 @@
-export type ScanStatus = 'estimated' | 'running' | 'done' | 'failed'
+export type ScanStatus = 'estimated' | 'running' | 'paused' | 'done' | 'failed'
 export type ScopeType = 'full' | 'sample'
 
 export interface CostEstimate {

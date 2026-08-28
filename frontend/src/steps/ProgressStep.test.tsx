@@ -102,6 +102,31 @@ describe('ProgressStep', () => {
     expect(progressIndicator.style.transform).not.toBe('translateX(-100%)')
   })
 
+  it('shows a distinct, non-success, non-failure treatment when status is paused', () => {
+    mockScanEvents({
+      scan: {
+        scan_id: 'scan-1', status: 'paused', scope_type: 'full',
+        total_products: 20, completed_products: 12,
+        estimate: {
+          queries_without_refresh: 20, queries_with_refresh: 20,
+          cost_usd_without_refresh: '0.20', cost_usd_with_refresh: '0.20',
+          seconds_without_refresh: 10, seconds_with_refresh: 10,
+        },
+        overlapping_count: 0, stale_count: 0,
+      },
+    })
+
+    render(<ProgressStep scanId="scan-1" onDone={vi.fn()} />)
+
+    const pausedMessage = screen.getByText(/skan wstrzymany/i)
+    expect(pausedMessage).toBeInTheDocument()
+    expect(pausedMessage.className).toContain('text-warning')
+    expect(pausedMessage.className).not.toContain('text-destructive')
+    expect(pausedMessage.className).not.toContain('text-success')
+
+    expect(screen.getByRole('button', { name: 'Zobacz raport' })).toBeInTheDocument()
+  })
+
   it('shows a polling indicator when the source falls back to polling', () => {
     mockScanEvents({
       source: 'polling',

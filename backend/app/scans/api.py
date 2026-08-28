@@ -487,7 +487,7 @@ async def stream_scan_events(scan_id: str, store: ScanStore = Depends(get_store)
         while True:
             scan = store.get_scan(scan_id)
             yield f"data: {json.dumps(_scan_to_dict(scan))}\n\n"
-            if scan.status.value in ("done", "failed"):
+            if scan.status.value in ("done", "failed", "paused"):
                 break
             if scan.status.value == "estimated":
                 estimated_ticks += 1

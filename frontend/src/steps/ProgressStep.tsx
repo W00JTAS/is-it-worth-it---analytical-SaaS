@@ -29,7 +29,7 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
   const percent = scan.total_products > 0
     ? Math.min(100, Math.round((scan.completed_products / scan.total_products) * 100))
     : 0
-  const isTerminal = scan.status === 'done' || scan.status === 'failed'
+  const isTerminal = scan.status === 'done' || scan.status === 'failed' || scan.status === 'paused'
   // A failed scan can die before its first product completes (percent === 0), which would
   // translate the indicator fully out of the track and hide the red color entirely — floor it
   // so the failure is always visible, not just implied by 0/N text.
@@ -55,10 +55,18 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
         <>
           <p
             className={`text-sm font-medium ${
-              scan.status === 'failed' ? 'text-destructive' : 'text-success'
+              scan.status === 'failed'
+                ? 'text-destructive'
+                : scan.status === 'paused'
+                  ? 'text-warning'
+                  : 'text-success'
             }`}
           >
-            {scan.status === 'done' ? 'Skan zakończony.' : 'Skan zakończony z błędami.'}
+            {scan.status === 'done'
+              ? 'Skan zakończony.'
+              : scan.status === 'paused'
+                ? 'Skan wstrzymany — limit zapytań dostawcy wyczerpany. Uruchom skan ponownie później, aby dokończyć.'
+                : 'Skan zakończony z błędami.'}
           </p>
           <Button type="button" onClick={() => onDone(scanId)}>
             Zobacz raport

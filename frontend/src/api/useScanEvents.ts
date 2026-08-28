@@ -15,7 +15,7 @@ const MAX_RECONNECT_ATTEMPTS = 3
 const POLL_INTERVAL_MS = 2000
 
 function isTerminal(status: string): boolean {
-  return status === 'done' || status === 'failed'
+  return status === 'done' || status === 'failed' || status === 'paused'
 }
 
 export function useScanEvents(scanId: string | null): ScanEventsState {

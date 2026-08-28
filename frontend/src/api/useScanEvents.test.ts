@@ -90,6 +90,14 @@ describe('useScanEvents', () => {
     expect(FakeEventSource.instances[0].closed).toBe(true)
   })
 
+  it('closes the connection when status is paused', () => {
+    renderHook(() => useScanEvents('scan-1'))
+
+    FakeEventSource.instances[0].emitMessage(scanPayload({ status: 'paused' }))
+
+    expect(FakeEventSource.instances[0].closed).toBe(true)
+  })
+
   it('surfaces a timeout payload as an error and closes the connection', () => {
     const { result } = renderHook(() => useScanEvents('scan-1'))
 

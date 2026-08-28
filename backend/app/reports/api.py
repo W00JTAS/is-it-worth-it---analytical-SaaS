@@ -13,7 +13,7 @@ from app.scans.store import ScanStore
 
 router = APIRouter()
 
-REPORTABLE_STATUSES = ("done", "failed")
+REPORTABLE_STATUSES = ("done", "failed", "paused")
 
 
 def _parse_decimal(name: str, value: str) -> Decimal:
