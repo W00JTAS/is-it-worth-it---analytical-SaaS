@@ -3,12 +3,11 @@ from __future__ import annotations
 import json
 import logging
 from decimal import Decimal
-from typing import Any
 
 import httpx
 
 from app.models.product import Product
-from app.providers.base import OfferResult, ProviderAuthError, ProviderProfile, ProviderUnavailable
+from app.providers.base import OfferResult, ProviderProfile, ProviderUnavailable
 from app.providers.parsing import RESPONSE_SCHEMA, validate_offer_fields
 from app.providers.retry import call_with_retry
 
@@ -88,7 +87,15 @@ class GroqProvider:
         executed_tools = message.get("executed_tools") or []
         urls: list[str] = []
         for tool in executed_tools:
-            for result in tool.get("search_results") or []:
+            # search_results is an OBJECT with a "results" key (verified against
+            # the published groq SDK's type definitions,
+            # groq/types/chat/chat_completion_message.py:
+            # ExecutedTool.search_results: Optional[ExecutedToolSearchResults],
+            # where ExecutedToolSearchResults.results: Optional[List[...]]) —
+            # NOT a bare list, despite how the prose docs read. Also absent
+            # entirely (None) when the tool call found nothing.
+            search_results = tool.get("search_results") or {}
+            for result in search_results.get("results") or []:
                 url = result.get("url")
                 if isinstance(url, str) and url not in urls:
                     urls.append(url)

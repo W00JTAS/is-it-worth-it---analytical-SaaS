@@ -22,7 +22,7 @@ def _make_product(**overrides) -> Product:
 def _search_response(content: str, search_results: list[dict] | None = None) -> dict:
     message: dict = {"content": content}
     if search_results is not None:
-        message["executed_tools"] = [{"search_results": search_results}]
+        message["executed_tools"] = [{"search_results": {"results": search_results}}]
     return {"choices": [{"message": message}]}
 
 
@@ -183,3 +183,22 @@ def test_returns_none_on_malformed_search_response():
     offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
 
     assert offer is None
+
+
+def test_returns_none_citations_when_search_results_results_field_is_none():
+    # SDK types search_results.results as Optional — must not crash when it's
+    # None (e.g. the tool ran but found nothing) rather than an empty list.
+    client = _TwoCallClient(
+        search_payload={
+            "choices": [{"message": {
+                "content": "no offer found",
+                "executed_tools": [{"search_results": {"results": None}}],
+            }}]
+        },
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = GroqProvider(api_key="test-key", client=client)
+
+    offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    assert offer is None  # must not raise
