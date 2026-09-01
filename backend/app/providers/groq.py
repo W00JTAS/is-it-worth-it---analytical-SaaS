@@ -43,11 +43,21 @@ class GroqProvider:
         self._api_key = api_key
         self._client = client or httpx.Client(timeout=timeout)
         self._search_model = search_model
+        # Exposes the search step's raw prose to callers that want it (e.g.
+        # provider_eval.py's --keep-raw) without changing find_cheapest's
+        # return type or signature. Reset at the start of every call, then
+        # set from whatever _search actually returned — including None when
+        # the search step produced no usable content — so a caller reading
+        # it right after find_cheapest() always sees THIS call's result, not
+        # a stale value from a previous product.
+        self.last_search_text: str | None = None
 
     def find_cheapest(
         self, product: Product, market: str, max_delivery_days: int
     ) -> OfferResult | None:
+        self.last_search_text = None
         search_text, citations = self._search(product, market, max_delivery_days)
+        self.last_search_text = search_text
         if not search_text:
             return None
         return self._extract(search_text, citations, max_delivery_days)

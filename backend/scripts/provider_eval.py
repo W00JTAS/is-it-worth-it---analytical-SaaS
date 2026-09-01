@@ -223,8 +223,34 @@ def build_provider(name: str):
     raise SystemExit(f"unknown provider {name!r}")
 
 
+def find_latest_result_file(provider: str, seed: int, sample_size: int) -> Path | None:
+    """Returns the most recent prior result file for this exact
+    (provider, seed, sample_size) combo — the one with the largest trailing
+    unix timestamp in its filename — or None if none exists yet.
+    """
+    pattern = f"{provider}_seed{seed}_n{sample_size}_*.json"
+    candidates = list(RESULTS_DIR.glob(pattern))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: int(p.stem.rsplit("_", 1)[-1]))
+
+
+def load_prior_results(path: Path) -> list[dict]:
+    """Accepts both result-file shapes: the legacy bare JSON array (every
+    file committed before this task, and still written by nothing new), and
+    the {"summary": ..., "results": [...]} shape this task introduces.
+    """
+    loaded = json.loads(path.read_text())
+    if isinstance(loaded, list):
+        return loaded
+    if isinstance(loaded, dict):
+        return loaded.get("results", [])
+    raise ValueError(f"unrecognized result file shape in {path}")
+
+
 def run_eval(
     provider, products: list[Product], market: str, max_delivery_days: int, delay_seconds: float,
+    keep_raw: bool = False,
 ) -> list[dict]:
     results = []
     for i, product in enumerate(products, 1):
@@ -245,6 +271,11 @@ def run_eval(
                 entry["offer"] = {k: str(v) if isinstance(v, Decimal) else v
                                    for k, v in asdict(offer).items() if k != "raw_response"}
                 print(f"FOUND {offer.price} {offer.currency} @ {offer.seller}")
+        if keep_raw:
+            # Not every provider exposes this (only GroqProvider does, via
+            # last_search_text) — absent on anything else, including the
+            # Gemini spike client.
+            entry["search_raw_text"] = getattr(provider, "last_search_text", None)
         results.append(entry)
         if i < len(products):
             time.sleep(delay_seconds)
@@ -263,6 +294,13 @@ def main() -> None:
                          help="pause between calls; conservative default since free-tier RPM isn't confirmed for every provider")
     parser.add_argument("--debug-raw", action="store_true",
                          help="gemini only: print one raw interaction object and exit, before running the batch")
+    parser.add_argument("--only-unresolved", action="store_true",
+                         help="skip products whose most recent prior result for this "
+                              "(provider, seed, sample-size) was already 'found'; those entries "
+                              "carry forward unchanged into the merged output")
+    parser.add_argument("--keep-raw", action="store_true",
+                         help="capture the search step's raw text into each entry as "
+                              "search_raw_text (off by default: makes result files much larger)")
     args = parser.parse_args()
 
     products = sampled_products(args.csv, args.sample_size, args.seed)
@@ -278,16 +316,54 @@ def main() -> None:
             print(repr(interaction))
         return
 
-    results = run_eval(provider, products, args.market, args.max_delivery_days, args.delay_seconds)
+    resolved_entries: dict[str, dict] = {}
+    products_to_query = products
+    if args.only_unresolved:
+        prior_file = find_latest_result_file(args.provider, args.seed, args.sample_size)
+        if prior_file is None:
+            print("--only-unresolved: no prior result file found, running full sample")
+        else:
+            prior_by_sku = {r["sku"]: r for r in load_prior_results(prior_file)}
+            resolved_entries = {sku: r for sku, r in prior_by_sku.items() if r.get("outcome") == "found"}
+            products_to_query = [p for p in products if p.external_id not in resolved_entries]
+            print(f"--only-unresolved: {len(resolved_entries)} already resolved (skipped), "
+                  f"{len(products_to_query)} to query this run (prior: {prior_file.name})")
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    out_file = RESULTS_DIR / f"{args.provider}_seed{args.seed}_n{args.sample_size}_{int(time.time())}.json"
-    out_file.write_text(json.dumps(results, indent=2))
+    new_results = run_eval(
+        provider, products_to_query, args.market, args.max_delivery_days, args.delay_seconds,
+        keep_raw=args.keep_raw,
+    )
+    new_by_sku = {r["sku"]: r for r in new_results}
+
+    # Merged in sample order: resolved SKUs carry the prior entry forward
+    # unchanged, everything else gets this run's fresh result. The written
+    # file always describes the full sample, never just the re-queried slice.
+    results = [
+        resolved_entries[p.external_id] if p.external_id in resolved_entries else new_by_sku[p.external_id]
+        for p in products
+    ]
 
     found = sum(1 for r in results if r["outcome"] == "found")
     not_found = sum(1 for r in results if r["outcome"] == "not_found")
     errored = sum(1 for r in results if r["outcome"] == "error")
     total = len(results)
+    completed = found + not_found
+    summary = {
+        "found": found,
+        "not_found": not_found,
+        "error": errored,
+        "total": total,
+        "found_rate_raw": (found / total) if total else 0.0,
+        # More meaningful than the raw rate: error entries are rate-limit
+        # noise unrelated to search quality, see
+        # .claude/rules/groq-compound-free-tier-reliability.md.
+        "found_rate_completed": (found / completed) if completed else None,
+    }
+
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    out_file = RESULTS_DIR / f"{args.provider}_seed{args.seed}_n{args.sample_size}_{int(time.time())}.json"
+    out_file.write_text(json.dumps({"summary": summary, "results": results}, indent=2))
+
     print(f"\n{args.provider}: {found}/{total} found, {not_found}/{total} not found, "
           f"{errored}/{total} error ({found / total:.0%} success)")
     print(f"Results written to {out_file}")
