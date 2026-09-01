@@ -37,6 +37,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.models.product import Product  # noqa: E402
 from app.providers.base import OfferResult, ProviderUnavailable  # noqa: E402
+from app.providers.fallback import FallbackProvider  # noqa: E402
+from app.providers.firecrawl import FirecrawlProvider  # noqa: E402
 from app.providers.groq import GroqProvider  # noqa: E402
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -220,6 +222,12 @@ def build_provider(name: str):
         return GroqProvider(api_key=os.environ["GROQ_API_KEY"], search_model="groq/compound")
     if name == "gemini":
         return GeminiSearchClient(api_key=os.environ["GEMINI_API_KEY"])
+    if name == "groq+firecrawl":
+        primary = GroqProvider(api_key=os.environ["GROQ_API_KEY"])
+        secondary = FirecrawlProvider(
+            api_key=os.environ["FIRECRAWL_API_KEY"], groq_api_key=os.environ["GROQ_API_KEY"],
+        )
+        return FallbackProvider(primary, secondary)
     raise SystemExit(f"unknown provider {name!r}")
 
 
@@ -284,7 +292,10 @@ def run_eval(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--provider", required=True, choices=["groq-compound-mini", "groq-compound", "gemini"])
+    parser.add_argument(
+        "--provider", required=True,
+        choices=["groq-compound-mini", "groq-compound", "gemini", "groq+firecrawl"],
+    )
     parser.add_argument("--csv", type=Path, default=DEFAULT_CSV)
     parser.add_argument("--sample-size", type=int, default=25)
     parser.add_argument("--seed", type=int, default=42)

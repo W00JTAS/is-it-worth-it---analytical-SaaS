@@ -7,6 +7,9 @@ import pytest
 import scripts.provider_eval as provider_eval
 from app.models.product import Product
 from app.providers.base import OfferResult
+from app.providers.fallback import FallbackProvider
+from app.providers.firecrawl import FirecrawlProvider
+from app.providers.groq import GroqProvider
 
 
 def _make_product(sku: str, name: str = "Product") -> Product:
@@ -206,3 +209,26 @@ def test_keep_raw_flag_off_omits_search_raw_text(monkeypatch):
     data = json.loads(out_file.read_text())
     for entry in data["results"]:
         assert "search_raw_text" not in entry
+
+
+def test_build_provider_groq_plus_firecrawl_returns_fallback_wrapping_both(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "dummy-groq-key")
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "dummy-firecrawl-key")
+
+    provider = provider_eval.build_provider("groq+firecrawl")
+
+    assert isinstance(provider, FallbackProvider)
+    assert isinstance(provider.primary, GroqProvider)
+    assert isinstance(provider.secondary, FirecrawlProvider)
+    assert provider.primary._api_key == "dummy-groq-key"
+    assert provider.secondary._api_key == "dummy-firecrawl-key"
+    assert provider.secondary._groq_api_key == "dummy-groq-key"
+    assert provider.name == "groq+firecrawl"
+
+
+def test_build_provider_groq_plus_firecrawl_without_firecrawl_key_raises_keyerror(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "dummy-groq-key")
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+
+    with pytest.raises(KeyError):
+        provider_eval.build_provider("groq+firecrawl")
