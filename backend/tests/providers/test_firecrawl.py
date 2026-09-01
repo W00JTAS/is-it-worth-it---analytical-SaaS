@@ -214,6 +214,49 @@ def test_extract_prompt_includes_search_snippet_text():
     assert "https://example.com/product" in prompt
 
 
+def test_extract_prompt_carries_market_and_deliverability_requirement():
+    # Regression for the reviewer's Important finding: `market` reached
+    # `_search` (for the location boost) but never `_extract`'s prompt, so
+    # the extraction model had no deliverability or market context at all —
+    # risking a valid-looking OfferResult for an offer that doesn't actually
+    # ship to the target market, or in a currency the caller doesn't expect
+    # (see .claude/rules/money.md's class of bug: a wrong number produced
+    # silently, not an error).
+    client = _TwoServiceClient(
+        search_payload=_search_response([
+            {"title": "Example Shop", "description": "Cena: 89.99 zl", "url": "https://example.com/product"},
+        ]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    prompt = client.requests[1]["json"]["messages"][0]["content"]
+    assert "PL" in prompt
+    assert "5 days" in prompt  # max_delivery_days threaded through
+    assert "seller can be based anywhere" in prompt  # not a seller-location requirement
+
+
+def test_extract_prompt_clamps_default_delivery_days_to_max_delivery_days():
+    # At a tight max_delivery_days (below the generic 3-day fallback), the
+    # fallback used for an unstated delivery time must not itself exceed the
+    # caller's ceiling, or validate_offer_fields would reject every
+    # unstated-delivery-time offer outright.
+    client = _TwoServiceClient(
+        search_payload=_search_response([
+            {"title": "Example Shop", "description": "89.99 zl", "url": "https://example.com/product"},
+        ]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=1)
+
+    prompt = client.requests[1]["json"]["messages"][0]["content"]
+    assert "use 1 as a conservative default" in prompt
+
+
 def test_extract_model_constructor_override_is_used_in_extract_call():
     client = _TwoServiceClient(
         search_payload=_search_response([

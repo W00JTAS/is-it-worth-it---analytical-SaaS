@@ -83,7 +83,7 @@ class FirecrawlProvider:
         results = self._search(product, market)
         if not results:
             return None
-        return self._extract(results, max_delivery_days)
+        return self._extract(results, market, max_delivery_days)
 
     def _search(self, product: Product, market: str) -> list[dict]:
         # EAN-first: live testing during this project's investigation found
@@ -123,7 +123,9 @@ class FirecrawlProvider:
             return []
         return web_results
 
-    def _extract(self, results: list[dict], max_delivery_days: int) -> OfferResult | None:
+    def _extract(
+        self, results: list[dict], market: str, max_delivery_days: int
+    ) -> OfferResult | None:
         # Order-preserving de-duplication, same intent as GroqProvider's
         # citation handling.
         citations = tuple(dict.fromkeys(
@@ -140,7 +142,10 @@ class FirecrawlProvider:
                 json={
                     "model": self._extract_model,
                     "messages": [
-                        {"role": "user", "content": self._build_extract_prompt(results, max_delivery_days)}
+                        {
+                            "role": "user",
+                            "content": self._build_extract_prompt(results, market, max_delivery_days),
+                        }
                     ],
                     "response_format": {
                         "type": "json_schema",
@@ -167,7 +172,7 @@ class FirecrawlProvider:
             max_delivery_days=max_delivery_days,
         )
 
-    def _build_extract_prompt(self, results: list[dict], max_delivery_days: int) -> str:
+    def _build_extract_prompt(self, results: list[dict], market: str, max_delivery_days: int) -> str:
         lines = []
         for index, result in enumerate(results, start=1):
             if not isinstance(result, dict):
@@ -177,14 +182,25 @@ class FirecrawlProvider:
             url = result.get("url", "")
             lines.append(f"{index}. {title}\n   {description}\n   {url}")
         snippets = "\n".join(lines)
+        # min(): if max_delivery_days itself is below the generic default (1
+        # or 2 days), the fallback must not exceed it either, or
+        # validate_offer_fields would reject every unstated-delivery-time
+        # offer outright.
+        default_delivery_days = min(DEFAULT_DELIVERY_DAYS, max_delivery_days)
         return (
             "Below is a numbered list of web search results (title / description / url) for a "
             "product. Extract the cheapest genuine, currently-buyable offer described into the "
             "requested JSON schema. Prices and sellers are often stated directly in the "
-            'description text. Set "found" to false if none of the results describes a genuine '
-            "current offer, or if the only offer described has delivery_days greater than "
-            f"{max_delivery_days}. Only set delivery_days to a specific value when the "
-            f"description text actually supports it; otherwise use {DEFAULT_DELIVERY_DAYS} as a "
-            "conservative default rather than guessing.\n\n"
+            "description text.\n\n"
+            f"Only count an offer as valid if it is deliverable to a buyer in {market} within "
+            f"{max_delivery_days} days — the seller can be based anywhere, as long as the listing "
+            f"indicates it ships to {market} in time; do not reject an offer merely for being "
+            f"listed on a site not based in {market}. Report the price in the currency actually "
+            f'stated for that offer, not a converted or assumed one. Set "found" to false if none '
+            f"of the results describes a genuine current offer deliverable to {market} in time, or "
+            f"if the only offer described has delivery_days greater than {max_delivery_days}. Only "
+            "set delivery_days to a specific value when the description text actually supports it; "
+            f"otherwise use {default_delivery_days} as a conservative default rather than "
+            "guessing.\n\n"
             f"Search results:\n{snippets}"
         )
