@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import re
 import time
 from typing import Callable
 
@@ -24,8 +25,11 @@ def call_with_retry(send: Callable[[], httpx.Response]) -> httpx.Response:
       a 17,500-product scan would waste the whole attempt budget on a
       failure the first response already fully diagnosed.
     - 413, 429, or 5xx -> retried with exponential backoff + jitter, honouring
-      a `Retry-After` response header when present. Exhausting all attempts
-      raises ProviderRateLimited carrying the last-seen `Retry-After`. 413 is
+      a `Retry-After` response header when present, falling back to parsing a
+      suggested wait out of the JSON error body when the header is absent
+      (Groq never sets the header — see `_parse_retry_after_from_body`).
+      Exhausting all attempts raises ProviderRateLimited carrying the
+      last-seen retry-after. 413 is
       grouped here deliberately: observed live against Groq's compound-mini,
       an identical, correctly-sized request that got a 413 succeeded moments
       later unchanged — a transiently overloaded backend, not a genuine
@@ -65,14 +69,40 @@ def call_with_retry(send: Callable[[], httpx.Response]) -> httpx.Response:
     raise AssertionError("unreachable: loop always returns or raises")
 
 
+_BODY_RETRY_AFTER_RE = re.compile(
+    r"try again in (?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?", re.IGNORECASE
+)
+
+
 def _parse_retry_after(response: httpx.Response) -> float | None:
     value = response.headers.get("Retry-After")
-    if value is None:
-        return None
+    if value is not None:
+        try:
+            return float(value)
+        except ValueError:
+            pass
+    return _parse_retry_after_from_body(response)
+
+
+def _parse_retry_after_from_body(response: httpx.Response) -> float | None:
+    """Groq does not set the Retry-After header on 429s — the suggested wait
+    (e.g. "Please try again in 14.06s" or "...in 45m0s") is only in the JSON
+    error body's `error.message`. Parsing vendor prose is inherently fragile
+    (see .claude/rules/groq-compound-free-tier-reliability.md), so this is
+    deliberately best-effort: any parse failure just falls back to the
+    existing exponential backoff, same as before this existed.
+    """
     try:
-        return float(value)
-    except ValueError:
+        message = response.json()["error"]["message"]
+    except Exception:
         return None
+    if not isinstance(message, str):
+        return None
+    match = _BODY_RETRY_AFTER_RE.search(message)
+    if not match or not any(match.groups()):
+        return None
+    hours, minutes, seconds = (float(g) if g else 0.0 for g in match.groups())
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def _sleep_backoff(attempt: int, retry_after: float | None = None) -> None:

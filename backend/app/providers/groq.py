@@ -38,9 +38,11 @@ class GroqProvider:
         api_key: str,
         client: httpx.Client | None = None,
         timeout: float = 30.0,
+        search_model: str = SEARCH_MODEL,
     ):
         self._api_key = api_key
         self._client = client or httpx.Client(timeout=timeout)
+        self._search_model = search_model
 
     def find_cheapest(
         self, product: Product, market: str, max_delivery_days: int
@@ -61,7 +63,7 @@ class GroqProvider:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": SEARCH_MODEL,
+                    "model": self._search_model,
                     "messages": [
                         {"role": "user", "content": self._build_search_prompt(product, market, max_delivery_days)}
                     ],
@@ -142,13 +144,21 @@ class GroqProvider:
         )
 
     def _build_search_prompt(self, product: Product, market: str, max_delivery_days: int) -> str:
+        # "in the {market} market" (the original wording) was observed live
+        # to make the model reject sellers based outside that country even
+        # when they explicitly ship there within the deadline — e.g. it
+        # found a German seller with a Poland-shipping offer for a product
+        # and still answered "no genuine PL-market offer" because the
+        # seller itself wasn't Polish. The seller's location was never the
+        # actual requirement; "can this buyer receive it in time" is.
         ean_part = f" (EAN: {product.ean})" if product.ean else ""
         return (
             f'Search the web for the cheapest real, currently-buyable offer for the product '
-            f'"{product.name}"{ean_part} in the {market} market, from a seller that can deliver '
-            f"within {max_delivery_days} days. State the price, currency, seller name, the exact "
-            f"source URL, and expected delivery time. If you cannot find a genuine current offer, "
-            f"say so explicitly rather than guessing."
+            f'"{product.name}"{ean_part} that can be bought and delivered to a buyer in {market} '
+            f"within {max_delivery_days} days — the seller can be based anywhere, as long as it "
+            f"ships to {market} within that window. State the price, currency, seller name, the "
+            f"exact source URL, and expected delivery time to {market}. If you cannot find a "
+            f"genuine current offer meeting this, say so explicitly rather than guessing."
         )
 
     def _build_extract_prompt(self, search_text: str, max_delivery_days: int) -> str:
