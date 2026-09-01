@@ -15,6 +15,25 @@ API_URL = "https://api.groq.com/openai/v1/chat/completions"
 SEARCH_MODEL = "groq/compound-mini"
 EXTRACT_MODEL = "openai/gpt-oss-20b"
 
+# ISO market code -> Groq's expected search_settings.country value: a full
+# country name, lowercase (console.groq.com/docs/web-search#search-settings,
+# verified live 2026-09-01) — NOT an ISO code. Only markets this project
+# actually uses today (grepped app/scans/, app/models/product.py: "PL" is
+# the only market code that appears anywhere in the codebase, incl. the
+# scans API's default). Add an entry here only once a second market shows
+# up in real usage — don't pre-populate speculative ones.
+MARKET_COUNTRY_NAMES = {
+    "PL": "poland",
+}
+
+# Generous cap on the search call's response tokens: a genuine answer is a
+# few sentences (price, currency, seller, one URL, delivery estimate) —
+# comfortably under 150 tokens in observed responses — so 600 leaves ample
+# headroom for a verbose multi-sentence answer while still bounding the
+# worst case (a model that rambles) against the scarce daily token budget
+# documented in .claude/rules/groq-compound-free-tier-reliability.md.
+SEARCH_MAX_TOKENS = 600
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,10 +58,12 @@ class GroqProvider:
         client: httpx.Client | None = None,
         timeout: float = 30.0,
         search_model: str = SEARCH_MODEL,
+        extract_model: str = EXTRACT_MODEL,
     ):
         self._api_key = api_key
         self._client = client or httpx.Client(timeout=timeout)
         self._search_model = search_model
+        self._extract_model = extract_model
         # Exposes the search step's raw prose to callers that want it (e.g.
         # provider_eval.py's --keep-raw) without changing find_cheapest's
         # return type or signature. Reset at the start of every call, then
@@ -65,6 +86,19 @@ class GroqProvider:
     def _search(
         self, product: Product, market: str, max_delivery_days: int
     ) -> tuple[str | None, tuple[str, ...]]:
+        request_body: dict = {
+            "model": self._search_model,
+            "messages": [
+                {"role": "user", "content": self._build_search_prompt(product, market, max_delivery_days)}
+            ],
+            "max_tokens": SEARCH_MAX_TOKENS,
+        }
+        country = MARKET_COUNTRY_NAMES.get(market)
+        if country is not None:
+            # "boosts" (per Groq's docs), doesn't restrict, results toward
+            # this country — free server-side ranking help. Omitted entirely
+            # for an unmapped market rather than sending a guessed value.
+            request_body["search_settings"] = {"country": country}
         try:
             response = call_with_retry(lambda: self._client.post(
                 API_URL,
@@ -72,12 +106,7 @@ class GroqProvider:
                     "Authorization": f"Bearer {self._api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": self._search_model,
-                    "messages": [
-                        {"role": "user", "content": self._build_search_prompt(product, market, max_delivery_days)}
-                    ],
-                },
+                json=request_body,
             ))
             response_json = response.json()
         except httpx.HTTPError as exc:
@@ -124,7 +153,7 @@ class GroqProvider:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": EXTRACT_MODEL,
+                    "model": self._extract_model,
                     "messages": [
                         {"role": "user", "content": self._build_extract_prompt(search_text, max_delivery_days)}
                     ],
@@ -163,12 +192,11 @@ class GroqProvider:
         # actual requirement; "can this buyer receive it in time" is.
         ean_part = f" (EAN: {product.ean})" if product.ean else ""
         return (
-            f'Search the web for the cheapest real, currently-buyable offer for the product '
-            f'"{product.name}"{ean_part} that can be bought and delivered to a buyer in {market} '
-            f"within {max_delivery_days} days — the seller can be based anywhere, as long as it "
-            f"ships to {market} within that window. State the price, currency, seller name, the "
-            f"exact source URL, and expected delivery time to {market}. If you cannot find a "
-            f"genuine current offer meeting this, say so explicitly rather than guessing."
+            f'Find the cheapest real, currently-buyable offer for "{product.name}"{ean_part}, '
+            f"deliverable to a buyer in {market} within {max_delivery_days} days — seller can be "
+            f"based anywhere, as long as it ships to {market} in time. Report price, currency, "
+            f"seller name, exact source URL, and delivery time to {market}. If no genuine current "
+            f"offer qualifies, say so explicitly rather than guessing."
         )
 
     def _build_extract_prompt(self, search_text: str, max_delivery_days: int) -> str:

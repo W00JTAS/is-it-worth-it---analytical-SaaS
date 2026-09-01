@@ -185,6 +185,64 @@ def test_returns_none_on_malformed_search_response():
     assert offer is None
 
 
+def test_search_settings_country_boost_present_for_mapped_market():
+    client = _TwoCallClient(
+        search_payload=_search_response("no offer found"),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = GroqProvider(api_key="test-key", client=client)
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    assert client.requests[0]["json"]["search_settings"] == {"country": "poland"}
+
+
+def test_search_settings_absent_for_unmapped_market():
+    client = _TwoCallClient(
+        search_payload=_search_response("no offer found"),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = GroqProvider(api_key="test-key", client=client)
+
+    provider.find_cheapest(_make_product(), market="XX", max_delivery_days=5)
+
+    assert "search_settings" not in client.requests[0]["json"]
+
+
+def test_search_call_includes_positive_max_tokens():
+    client = _TwoCallClient(
+        search_payload=_search_response("no offer found"),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = GroqProvider(api_key="test-key", client=client)
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    max_tokens = client.requests[0]["json"]["max_tokens"]
+    assert isinstance(max_tokens, int)
+    assert max_tokens > 0
+
+
+def test_extract_model_constructor_override_is_used_in_extract_call():
+    client = _TwoCallClient(
+        search_payload=_search_response(
+            "The cheapest offer is 89.99 PLN at Example Shop.",
+            search_results=[
+                {"title": "Example Shop", "url": "https://example.com/product", "content": "...", "score": 0.9},
+            ],
+        ),
+        extract_payload=_extract_response({
+            "found": True, "price": 89.99, "currency": "PLN", "seller": "Example Shop",
+            "source_url": "https://example.com/product", "delivery_days": 2, "confidence": 0.85,
+        }),
+    )
+    provider = GroqProvider(api_key="test-key", client=client, extract_model="custom-model")
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    assert client.requests[1]["json"]["model"] == "custom-model"
+
+
 def test_returns_none_citations_when_search_results_results_field_is_none():
     # SDK types search_results.results as Optional — must not crash when it's
     # None (e.g. the tool ran but found nothing) rather than an empty list.
