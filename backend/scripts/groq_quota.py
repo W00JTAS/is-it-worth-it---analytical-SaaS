@@ -101,6 +101,22 @@ def probe(client: httpx.Client, api_key: str) -> ProbeResult:
     )
 
 
+# Why the OK verdict is worded as an upper bound rather than a prediction:
+# x-ratelimit-remaining-tokens is compound-mini's OWN token counter, but the
+# binding daily limit measured in
+# .claude/rules/groq-compound-free-tier-reliability.md is an undocumented
+# tokens-per-day budget on an INTERNAL orchestration model
+# (llama-3.3-70b-versatile, 100,000/day) that this header does not reflect at
+# all — real runs died with 86/250 requests and a healthy-looking token
+# header still showing. So the number below can look fine on an already-dead
+# day; the probe call succeeding is the only strong signal here.
+_UPPER_BOUND_CAVEAT = (
+    "upper bound only — does not reflect Groq's internal per-model daily "
+    "limit, see .claude/rules/groq-compound-free-tier-reliability.md; the "
+    "probe call itself succeeding is the only strong signal here"
+)
+
+
 def verdict(result: ProbeResult) -> str:
     if not result.success:
         return "EXHAUSTED - quota errored on the probe call itself"
@@ -112,7 +128,10 @@ def verdict(result: ProbeResult) -> str:
         estimated = int(remaining) // TOKENS_PER_LOOKUP_ESTIMATE
     except ValueError:
         return f"OK - probe succeeded, x-ratelimit-remaining-tokens header unparseable ({remaining!r})"
-    return f"OK - ~{estimated} lookups estimated remaining today"
+    return (
+        f"OK - ~{estimated} lookups possible under this header's counter alone "
+        f"({_UPPER_BOUND_CAVEAT})"
+    )
 
 
 def main(argv: list[str] | None = None) -> None:

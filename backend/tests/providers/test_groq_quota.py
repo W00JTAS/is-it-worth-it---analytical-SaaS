@@ -72,6 +72,13 @@ def test_successful_probe_verdict_estimates_remaining_lookups():
 
     assert line.startswith("OK")
     assert "34" in line  # 69988 // 2000
+    # The number is compound-mini's OWN token counter, which does not reflect
+    # the internal orchestration model's daily budget that actually binds
+    # (see .claude/rules/groq-compound-free-tier-reliability.md) — so the
+    # verdict must not read as a prediction of how many lookups will work.
+    assert "upper bound only" in line
+    assert "groq-compound-free-tier-reliability.md" in line
+    assert "estimated remaining today" not in line
 
 
 def test_rate_limited_probe_extracts_error_message_and_does_not_raise():
@@ -127,7 +134,8 @@ def test_main_exits_zero_on_successful_probe(monkeypatch, capsys):
     assert exc_info.value.code == 0
     out = capsys.readouterr().out
     assert "x-ratelimit-remaining-tokens: 69988" in out
-    assert out.strip().endswith("lookups estimated remaining today")
+    assert "lookups possible under this header's counter alone" in out
+    assert "upper bound only" in out
 
 
 def test_main_exits_one_on_rate_limited_probe(monkeypatch, capsys):

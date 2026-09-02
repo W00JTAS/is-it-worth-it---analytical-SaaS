@@ -71,6 +71,8 @@ Create a `.env.local` file in the **repo root** (not `backend/`) with your Perpl
 # Required: choose one
 PERPLEXITY_API_KEY=your-perplexity-key-here  # (default provider)
 # GROQ_API_KEY=your-groq-key-here             # (optional, set PROVIDER=groq to use)
+# FIRECRAWL_API_KEY=your-firecrawl-key-here   # (optional, only for scripts/provider_eval.py
+#                                             #  --provider groq+firecrawl; also needs GROQ_API_KEY)
 
 # Optional: select which AI provider to use
 # PROVIDER=perplexity  # default
