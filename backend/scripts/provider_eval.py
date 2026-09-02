@@ -27,6 +27,7 @@ import csv
 import json
 import os
 import random
+import re
 import sys
 import time
 from dataclasses import asdict
@@ -36,7 +37,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.models.product import Product  # noqa: E402
-from app.providers.base import OfferResult, ProviderUnavailable  # noqa: E402
+from app.providers.base import (  # noqa: E402
+    OfferResult,
+    ProviderAuthError,
+    ProviderUnavailable,
+)
 from app.providers.fallback import FallbackProvider  # noqa: E402
 from app.providers.firecrawl import FirecrawlProvider  # noqa: E402
 from app.providers.groq import GroqProvider  # noqa: E402
@@ -45,6 +50,23 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SAMPLES_DIR = SCRIPT_DIR / "eval_samples"
 RESULTS_DIR = SCRIPT_DIR / "eval_results"
 DEFAULT_CSV = SCRIPT_DIR.parent.parent / "supplier_z_cenami_i_ean.csv"
+
+# A `found` offer priced below this fraction of the product's own wholesale
+# price is flagged "suspiciously_low" so the plan's manual spot-check (3
+# random `found` entries per iteration) can start with the flagged ones
+# instead of purely random ones. Deliberately a single blunt threshold, not a
+# statistical model: nothing here rejects an offer, it only points a human at
+# the entries most likely to be an extraction error (a shipping cost, a
+# per-unit price on a multipack, an accessory's price scraped off the same
+# page). 0.1 is far below any plausible retail-vs-wholesale margin AND far
+# below any FX ratio in play (an offer quoted in EUR against a PLN wholesale
+# price sits around 0.23, well clear of the threshold), so currency is
+# deliberately not part of the comparison.
+SUSPICIOUS_PRICE_RATIO = Decimal("0.1")
+# Files this script writes are named <provider>_seed<N>_n<N>_<unix-ts>.json;
+# the glob alone also matches hand-made siblings (a renamed backup like
+# ..._1756_backup.json), whose trailing segment is not an integer.
+RESULT_FILE_TIMESTAMP_RE = re.compile(r"_(\d+)$")
 
 
 def load_catalog(csv_path: Path) -> list[Product]:
@@ -237,10 +259,18 @@ def find_latest_result_file(provider: str, seed: int, sample_size: int) -> Path 
     unix timestamp in its filename — or None if none exists yet.
     """
     pattern = f"{provider}_seed{seed}_n{sample_size}_*.json"
-    candidates = list(RESULTS_DIR.glob(pattern))
+    # Skip anything the glob matched whose trailing segment isn't a pure
+    # integer timestamp (e.g. a hand-renamed backup) rather than crashing the
+    # whole run on int() — a stray file in the results dir must not be able
+    # to abort a budget-constrained eval before it makes a single call.
+    candidates = [
+        (int(m.group(1)), p)
+        for p in RESULTS_DIR.glob(pattern)
+        if (m := RESULT_FILE_TIMESTAMP_RE.search(p.stem))
+    ]
     if not candidates:
         return None
-    return max(candidates, key=lambda p: int(p.stem.rsplit("_", 1)[-1]))
+    return max(candidates)[1]
 
 
 def load_prior_results(path: Path) -> list[dict]:
@@ -256,6 +286,25 @@ def load_prior_results(path: Path) -> list[dict]:
     raise ValueError(f"unrecognized result file shape in {path}")
 
 
+def price_flag(offer: OfferResult, product: Product) -> str | None:
+    """Returns "suspiciously_low" when a found offer's price is implausible
+    against the product's own wholesale price, else None.
+
+    Eval-side only, never a provider-side rejection: `validate_offer_fields`
+    deliberately knows nothing about the product it was looking up, and this
+    heuristic is far too blunt to gate a real result on. Its only job is to
+    aim the plan's manual spot-check ("3 random `found` entries per
+    iteration") at the entries most likely to be an extraction error before
+    it spends the human's attention on random ones. See
+    SUSPICIOUS_PRICE_RATIO for why the threshold is currency-blind.
+    """
+    if product.wholesale_price is None or product.wholesale_price <= 0:
+        return None
+    if offer.price < product.wholesale_price * SUSPICIOUS_PRICE_RATIO:
+        return "suspiciously_low"
+    return None
+
+
 def run_eval(
     provider, products: list[Product], market: str, max_delivery_days: int, delay_seconds: float,
     keep_raw: bool = False,
@@ -266,6 +315,16 @@ def run_eval(
         entry: dict = {"sku": product.external_id, "name": product.name, "ean": product.ean}
         try:
             offer = provider.find_cheapest(product, market=market, max_delivery_days=max_delivery_days)
+        except ProviderAuthError:
+            # Not an ordinary per-product failure: a rejected key means every
+            # remaining call fails identically (see base.py's own docstring),
+            # so recording it as one "error" entry and moving on would burn
+            # the whole sample — and, on a shared key, the scarce daily
+            # budget — proving only that the key is still bad. Abort loudly
+            # and let main() crash; there are no partial results worth
+            # writing from a run that never authenticated.
+            print("AUTH ERROR — aborting run")
+            raise
         except Exception as exc:  # noqa: BLE001 — classify every failure mode, don't crash the batch
             entry["outcome"] = "error"
             entry["error"] = f"{type(exc).__name__}: {exc}"
@@ -278,11 +337,17 @@ def run_eval(
                 entry["outcome"] = "found"
                 entry["offer"] = {k: str(v) if isinstance(v, Decimal) else v
                                    for k, v in asdict(offer).items() if k != "raw_response"}
-                print(f"FOUND {offer.price} {offer.currency} @ {offer.seller}")
+                flag = price_flag(offer, product)
+                if flag is not None:
+                    entry["price_flag"] = flag
+                print(f"FOUND {offer.price} {offer.currency} @ {offer.seller}"
+                      + (f"  [{flag}]" if flag else ""))
         if keep_raw:
-            # Not every provider exposes this (only GroqProvider does, via
-            # last_search_text) — absent on anything else, including the
-            # Gemini spike client.
+            # Not every provider exposes this — GroqProvider and
+            # FirecrawlProvider do (via last_search_text), and
+            # FallbackProvider forwards it to whichever of the two actually
+            # answered. Absent on anything else, including the Gemini spike
+            # client, where this records None.
             entry["search_raw_text"] = getattr(provider, "last_search_text", None)
         results.append(entry)
         if i < len(products):
@@ -329,11 +394,13 @@ def main() -> None:
 
     resolved_entries: dict[str, dict] = {}
     products_to_query = products
+    prior_file_name: str | None = None
     if args.only_unresolved:
         prior_file = find_latest_result_file(args.provider, args.seed, args.sample_size)
         if prior_file is None:
             print("--only-unresolved: no prior result file found, running full sample")
         else:
+            prior_file_name = prior_file.name
             prior_by_sku = {r["sku"]: r for r in load_prior_results(prior_file)}
             resolved_entries = {sku: r for sku, r in prior_by_sku.items() if r.get("outcome") == "found"}
             products_to_query = [p for p in products if p.external_id not in resolved_entries]
@@ -359,15 +426,45 @@ def main() -> None:
     errored = sum(1 for r in results if r["outcome"] == "error")
     total = len(results)
     completed = found + not_found
+
+    # Two DIFFERENT metrics, never one blended number — the plan's first
+    # measurement safeguard ("Uczciwość pomiaru"): a cumulative best-of-N
+    # rate (what a user of the product would see, since retries and a cache
+    # exist) is not comparable with a single-run rate (what tells you whether
+    # a prompt change worked). Without these fields a file written by a
+    # resumed --only-unresolved run and one written by a full run are
+    # indistinguishable, and the resumed one's inflated rate silently reads
+    # as a prompt improvement.
+    found_this_run = sum(1 for r in new_results if r["outcome"] == "found")
+    not_found_this_run = sum(1 for r in new_results if r["outcome"] == "not_found")
+    error_this_run = sum(1 for r in new_results if r["outcome"] == "error")
+    queried_this_run = len(new_results)
+    carried_forward = total - queried_this_run
+
     summary = {
+        "mode": "only-unresolved" if args.only_unresolved else "full",
+        "prior_file": prior_file_name,
         "found": found,
         "not_found": not_found,
         "error": errored,
         "total": total,
-        "found_rate_raw": (found / total) if total else 0.0,
-        # More meaningful than the raw rate: error entries are rate-limit
-        # noise unrelated to search quality, see
+        "carried_forward": carried_forward,
+        "queried_this_run": queried_this_run,
+        "found_this_run": found_this_run,
+        "not_found_this_run": not_found_this_run,
+        "error_this_run": error_this_run,
+        # Cumulative: over the whole merged sample, including entries carried
+        # forward from a prior file untouched by this run. Equals
+        # found_rate_this_run for a full run, where nothing is carried
+        # forward.
+        "found_rate_cumulative": (found / total) if total else 0.0,
+        # Single-run: over ONLY what this run actually queried. This is the
+        # number comparable with the historical baselines in
         # .claude/rules/groq-compound-free-tier-reliability.md.
+        "found_rate_this_run": (found_this_run / queried_this_run) if queried_this_run else None,
+        # More meaningful than the raw cumulative rate: error entries are
+        # rate-limit noise unrelated to search quality, see the same rule
+        # file. Cumulative, like found_rate_cumulative.
         "found_rate_completed": (found / completed) if completed else None,
     }
 
@@ -375,8 +472,21 @@ def main() -> None:
     out_file = RESULTS_DIR / f"{args.provider}_seed{args.seed}_n{args.sample_size}_{int(time.time())}.json"
     out_file.write_text(json.dumps({"summary": summary, "results": results}, indent=2))
 
-    print(f"\n{args.provider}: {found}/{total} found, {not_found}/{total} not found, "
-          f"{errored}/{total} error ({found / total:.0%} success)")
+    cumulative_rate = (found / total) if total else 0.0
+    print(f"\n{args.provider} [{summary['mode']}]")
+    print(f"  cumulative (whole sample, incl. {carried_forward} carried forward): "
+          f"{found}/{total} found, {not_found}/{total} not found, {errored}/{total} error "
+          f"({cumulative_rate:.0%} found-rate)")
+    if queried_this_run:
+        print(f"  this run (queried {queried_this_run}): {found_this_run} found, "
+              f"{not_found_this_run} not found, {error_this_run} error "
+              f"({found_this_run / queried_this_run:.0%} found-rate)")
+    else:
+        print("  this run: nothing queried — no single-run found-rate to report")
+    flagged = sum(1 for r in results if r.get("price_flag"))
+    if flagged:
+        print(f"  {flagged} found entr{'y' if flagged == 1 else 'ies'} flagged "
+              f"price_flag=suspiciously_low — spot-check these first")
     print(f"Results written to {out_file}")
 
 
