@@ -327,6 +327,156 @@ def test_raises_provider_rate_limited_after_exhausting_retries_on_search(monkeyp
         provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
 
 
+def test_raises_provider_unavailable_when_body_reports_success_false():
+    # Firecrawl reports its own failures in-band: HTTP 200 with
+    # "success": false. Nothing else in the module reads `success`, so
+    # without an explicit check this falls through to the data.web lookup,
+    # comes back empty, and is misreported as a legitimate `None` — which
+    # base.py's contract says is safe to persist as a negative cache entry.
+    client = _TwoServiceClient(
+        search_payload={"success": False, "error": "insufficient credits"},
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    with pytest.raises(ProviderUnavailable) as exc_info:
+        provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    assert "insufficient credits" in str(exc_info.value)
+    assert len(client.requests) == 1  # no extraction call attempted
+
+
+def test_success_false_without_a_recognised_error_field_still_raises():
+    # Defensive: the exact error field on a failed v2/search response isn't
+    # confirmed against a live failure, so an unrecognised body must still
+    # raise ProviderUnavailable rather than crash on a missing key.
+    client = _TwoServiceClient(
+        search_payload={"success": False, "somethingElse": 42},
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    with pytest.raises(ProviderUnavailable):
+        provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+
+def test_success_true_with_empty_results_is_still_a_legitimate_none():
+    # Guard against over-correcting finding #6: only an explicit
+    # success:false is an unavailability. A successful search that genuinely
+    # found nothing must stay a cacheable None.
+    client = _TwoServiceClient(
+        search_payload=_search_response([]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    assert provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5) is None
+
+
+class _GarbageExtractClient:
+    """Search succeeds; the extraction call returns a structurally wrong
+    envelope (no choices) — unparseable garbage, not a model verdict."""
+
+    def post(self, url, headers, json):
+        if url == SEARCH_API_URL:
+            return _FakeResponse(_search_response([
+                {"title": "t", "description": "d", "url": "https://example.com/x"},
+            ]))
+        return _FakeResponse({"unexpected": "shape"})
+
+
+def test_raises_provider_unavailable_on_unparseable_extraction_envelope():
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=_GarbageExtractClient())
+
+    with pytest.raises(ProviderUnavailable):
+        provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+
+class _NonJsonExtractContentClient:
+    """Search succeeds; the extraction model's `content` isn't JSON at all."""
+
+    def post(self, url, headers, json):
+        if url == SEARCH_API_URL:
+            return _FakeResponse(_search_response([
+                {"title": "t", "description": "d", "url": "https://example.com/x"},
+            ]))
+        return _FakeResponse({"choices": [{"message": {"content": "I'm sorry, I cannot"}}]})
+
+
+def test_raises_provider_unavailable_when_extraction_content_is_not_json():
+    provider = FirecrawlProvider(
+        api_key="k", groq_api_key="g", client=_NonJsonExtractContentClient(),
+    )
+
+    with pytest.raises(ProviderUnavailable):
+        provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+
+class _NoFoundKeyExtractClient:
+    def post(self, url, headers, json):
+        if url == SEARCH_API_URL:
+            return _FakeResponse(_search_response([
+                {"title": "t", "description": "d", "url": "https://example.com/x"},
+            ]))
+        return _FakeResponse(_extract_response({"price": 10.0, "currency": "PLN"}))
+
+
+def test_raises_provider_unavailable_when_extraction_json_lacks_found_key():
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=_NoFoundKeyExtractClient())
+
+    with pytest.raises(ProviderUnavailable):
+        provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+
+def test_legitimate_found_false_extraction_still_returns_none_not_unavailable():
+    # The case that must NOT regress: a well-formed schema object where the
+    # model said "no offer" is a genuine negative result, safe to cache.
+    client = _TwoServiceClient(
+        search_payload=_search_response([
+            {"title": "t", "description": "d", "url": "https://example.com/x"},
+        ]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    assert provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5) is None
+
+
+def test_last_search_text_records_snippets_seen_by_extraction():
+    client = _TwoServiceClient(
+        search_payload=_search_response([
+            {"title": "Example Shop", "description": "Cena: 89.99 zl", "url": "https://example.com/product"},
+        ]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    assert provider.last_search_text is None  # nothing called yet
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    assert provider.last_search_text is not None
+    assert "Example Shop" in provider.last_search_text
+    assert "https://example.com/product" in provider.last_search_text
+    # Exactly the block the extraction prompt embedded, so --keep-raw records
+    # the material the extraction actually worked from.
+    assert provider.last_search_text in client.requests[1]["json"]["messages"][0]["content"]
+
+
+def test_last_search_text_is_set_before_the_early_return_on_no_results():
+    # A not_found caused by an empty search must still be debuggable offline
+    # — and must not leak the previous product's snippets.
+    client = _TwoServiceClient(
+        search_payload=_search_response([]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+    provider.last_search_text = "stale text from a previous product"
+
+    assert provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5) is None
+    assert provider.last_search_text == ""
+
+
 def test_raises_provider_rate_limited_after_exhausting_retries_on_extract(monkeypatch):
     monkeypatch.setattr("app.providers.retry.time.sleep", lambda *_: None)
 

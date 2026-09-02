@@ -67,9 +67,11 @@ class ProviderAuthError(Exception):
     leaving 17,500 products cycling through retries one at a time.
 
     Only guaranteed for providers whose HTTP calls route through
-    app.providers.retry.call_with_retry (currently GroqProvider only) —
-    PerplexityProvider still classifies every non-2xx as ProviderUnavailable
-    and cannot raise this.
+    app.providers.retry.call_with_retry — that is where 401/403 is
+    classified. A provider that does its own HTTP error handling instead
+    (PerplexityProvider) classifies every non-2xx as ProviderUnavailable and
+    cannot raise this. Deliberately not listing which providers are in which
+    group: that list goes stale every time one is added.
     """
 
 

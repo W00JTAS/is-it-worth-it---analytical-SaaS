@@ -36,14 +36,19 @@ class _FakeProvider:
     on whether secondary was ever consulted.
     """
 
-    def __init__(self, name: str, outcome, cost: str = "0.000", seconds: float = 1.0):
+    def __init__(self, name: str, outcome, cost: str = "0.000", seconds: float = 1.0,
+                 search_text: str | None = None):
         self.name = name
         self.profile = ProviderProfile(cost_per_query_usd=Decimal(cost), seconds_per_query=seconds)
         self._outcome = outcome
         self.call_count = 0
+        # Mirrors GroqProvider/FirecrawlProvider's --keep-raw debugging hook.
+        self._search_text = search_text
+        self.last_search_text: str | None = None
 
     def find_cheapest(self, product, market, max_delivery_days):
         self.call_count += 1
+        self.last_search_text = self._search_text
         if isinstance(self._outcome, Exception):
             raise self._outcome
         return self._outcome
@@ -145,10 +150,106 @@ def test_name_is_primary_plus_secondary():
     assert provider.name == "groq+firecrawl"
 
 
-def test_profile_uses_secondary_cost_and_summed_seconds():
+def test_profile_sums_both_costs_and_seconds():
     primary = _FakeProvider("groq", None, cost="0.000", seconds=4.0)
     secondary = _FakeProvider("firecrawl", None, cost="0.0017", seconds=5.0)
     provider = FallbackProvider(primary, secondary)
 
+    # Groq's free tier is 0.000, so today this is numerically identical to
+    # secondary's cost alone — the sum is what keeps it correct when two
+    # non-free providers are composed.
     assert provider.profile.cost_per_query_usd == Decimal("0.0017")
     assert provider.profile.seconds_per_query == pytest.approx(9.0)
+
+
+def test_profile_cost_sums_both_when_both_providers_cost_money():
+    primary = _FakeProvider("paid-a", None, cost="0.0030", seconds=4.0)
+    secondary = _FakeProvider("paid-b", None, cost="0.0017", seconds=5.0)
+    provider = FallbackProvider(primary, secondary)
+
+    assert provider.profile.cost_per_query_usd == Decimal("0.0047")
+
+
+def test_rate_limit_on_primary_falls_back_and_latches_primary_off():
+    # After Groq's daily wall fires, retrying primary on every remaining
+    # product only re-pays the retry backoff (~60s of sleeping, 4 wasted
+    # requests) before failing identically — so the first ProviderRateLimited
+    # must disable primary for the rest of this instance's life.
+    primary = _FakeProvider("primary", ProviderRateLimited("daily wall", retry_after=1800.0))
+    secondary_offer = _make_offer("Secondary Seller")
+    secondary = _FakeProvider("secondary", secondary_offer)
+    provider = FallbackProvider(primary, secondary)
+
+    first = provider.find_cheapest(_make_product(), "PL", 5)
+
+    assert first is secondary_offer
+    assert primary.call_count == 1
+    assert secondary.call_count == 1
+    assert provider._primary_disabled is True
+
+    second = provider.find_cheapest(_make_product(), "PL", 5)
+
+    assert second is secondary_offer
+    assert primary.call_count == 1  # primary never touched again
+    assert secondary.call_count == 2
+
+
+def test_plain_provider_unavailable_does_not_latch_primary_off():
+    # Only a rate limit means "primary's budget is gone". An ordinary
+    # transient failure (timeout, 5xx) must still let the next product try
+    # primary first, or one blip would permanently shift all traffic to the
+    # costlier secondary.
+    primary = _FakeProvider("primary", ProviderUnavailable("timeout"))
+    secondary = _FakeProvider("secondary", _make_offer("Secondary Seller"))
+    provider = FallbackProvider(primary, secondary)
+
+    provider.find_cheapest(_make_product(), "PL", 5)
+    provider.find_cheapest(_make_product(), "PL", 5)
+
+    assert provider._primary_disabled is False
+    assert primary.call_count == 2
+    assert secondary.call_count == 2
+
+
+def test_last_search_text_forwards_to_primary_when_primary_answered():
+    primary = _FakeProvider("primary", _make_offer(), search_text="primary raw text")
+    secondary = _FakeProvider("secondary", None, search_text="secondary raw text")
+    provider = FallbackProvider(primary, secondary)
+
+    provider.find_cheapest(_make_product(), "PL", 5)
+
+    assert provider.last_search_text == "primary raw text"
+
+
+def test_last_search_text_forwards_to_secondary_when_secondary_answered():
+    primary = _FakeProvider("primary", None, search_text="primary raw text")
+    secondary = _FakeProvider("secondary", _make_offer(), search_text="secondary raw text")
+    provider = FallbackProvider(primary, secondary)
+
+    provider.find_cheapest(_make_product(), "PL", 5)
+
+    assert provider.last_search_text == "secondary raw text"
+
+
+def test_last_search_text_is_none_before_any_call_and_for_providers_without_the_hook():
+    class _NoHookProvider(_FakeProvider):
+        """A provider that never exposes last_search_text at all — e.g. the
+        Gemini spike client in provider_eval.py."""
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            del self.last_search_text
+
+        def find_cheapest(self, product, market, max_delivery_days):
+            self.call_count += 1
+            return self._outcome
+
+    provider = FallbackProvider(
+        _NoHookProvider("primary", _make_offer()), _FakeProvider("secondary", None),
+    )
+
+    assert provider.last_search_text is None  # nothing called yet
+
+    provider.find_cheapest(_make_product(), "PL", 5)
+
+    assert provider.last_search_text is None  # primary has no such attribute

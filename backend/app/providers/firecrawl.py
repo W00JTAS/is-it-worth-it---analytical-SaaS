@@ -40,6 +40,23 @@ DEFAULT_DELIVERY_DAYS = 3
 logger = logging.getLogger(__name__)
 
 
+def _error_detail(body: dict) -> str:
+    """Best-effort human-readable detail out of a Firecrawl `success: false`
+    body. Deliberately defensive: the exact error field name on a failed
+    v2/search response is not confirmed against a live failure (only against
+    the docs' success shape), so this tries the plausible names and falls
+    back to the whole body rather than raising a KeyError of its own inside
+    an error path.
+    """
+    for key in ("error", "message", "detail", "warning"):
+        value = body.get(key)
+        if isinstance(value, str) and value:
+            return value
+        if value is not None:
+            return repr(value)
+    return f"no error detail in response body ({body!r})"
+
+
 class FirecrawlProvider:
     """BYOK provider backed by Firecrawl's Search API for grounding — a
     separate free-tier budget (1000 credits/month, no card) that sits
@@ -76,11 +93,22 @@ class FirecrawlProvider:
         self._groq_api_key = groq_api_key
         self._client = client or httpx.Client(timeout=timeout)
         self._extract_model = extract_model
+        # Same contract as GroqProvider.last_search_text: exposes the search
+        # step's raw grounding material to callers that want it (e.g.
+        # provider_eval.py's --keep-raw) without changing find_cheapest's
+        # return type. For Firecrawl the "search text" is the rendered
+        # snippet block that the extraction step actually sees. Reset at the
+        # start of every call and set right after the search step, before any
+        # early return, so a caller reading it after a `None` result always
+        # sees THIS call's snippets rather than a previous product's.
+        self.last_search_text: str | None = None
 
     def find_cheapest(
         self, product: Product, market: str, max_delivery_days: int
     ) -> OfferResult | None:
+        self.last_search_text = None
         results = self._search(product, market)
+        self.last_search_text = self._format_snippets(results)
         if not results:
             return None
         return self._extract(results, market, max_delivery_days)
@@ -112,8 +140,27 @@ class FirecrawlProvider:
                 "Firecrawl search call failed transiently for product %r: %s", product.name, exc,
             )
             raise ProviderUnavailable(str(exc)) from exc
-        except json.JSONDecodeError:
-            return []
+        except json.JSONDecodeError as exc:
+            # An unparseable body is not "the search found nothing" — the
+            # call never produced a usable answer at all. Returning [] here
+            # would surface as a legitimate `None` from find_cheapest and be
+            # persisted as a negative cache entry (see base.py's
+            # ProviderUnavailable vs None contract).
+            raise ProviderUnavailable(
+                f"Firecrawl search response body was not valid JSON: {exc}"
+            ) from exc
+
+        # Firecrawl reports its own failures in-band: HTTP 200 with
+        # "success": false in the body. Nothing above catches that, so
+        # without this check a failed search falls through to the data.web
+        # lookup, comes back empty, and is misreported as a genuine
+        # "no offers exist" — cacheable negative, per base.py's contract.
+        # Only an explicit False counts: a body with no "success" key at all
+        # (older/other shapes) is left to the data.web lookup below.
+        if isinstance(response_json, dict) and response_json.get("success") is False:
+            raise ProviderUnavailable(
+                f"Firecrawl search reported success=false: {_error_detail(response_json)}"
+            )
 
         try:
             web_results = response_json["data"]["web"]
@@ -157,22 +204,42 @@ class FirecrawlProvider:
         except httpx.HTTPError as exc:
             logger.warning("Groq extract call failed transiently: %s", exc)
             raise ProviderUnavailable(str(exc)) from exc
-        except json.JSONDecodeError:
-            return None
+        except json.JSONDecodeError as exc:
+            raise ProviderUnavailable(
+                f"Groq extract response body was not valid JSON: {exc}"
+            ) from exc
 
         raw_response = json.dumps(response_json)
+        # An unparseable envelope/content is NOT the model saying "no offer".
+        # A genuine negative is a well-formed {"found": false, ...} object,
+        # which falls through to validate_offer_fields below and correctly
+        # returns None (a cacheable negative). Garbage that never reached the
+        # schema at all is an unavailability, per base.py's contract.
         try:
             content = response_json["choices"][0]["message"]["content"]
             parsed = json.loads(content)
-        except (KeyError, IndexError, TypeError, json.JSONDecodeError):
-            return None
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+            raise ProviderUnavailable(
+                f"Groq extract response was unparseable ({type(exc).__name__}: {exc})"
+            ) from exc
+        if not isinstance(parsed, dict) or "found" not in parsed:
+            raise ProviderUnavailable(
+                "Groq extract response did not contain the expected schema "
+                f"object (no 'found' key): {parsed!r}"
+            )
 
         return validate_offer_fields(
             parsed, raw_response=raw_response, citations=citations,
             max_delivery_days=max_delivery_days,
         )
 
-    def _build_extract_prompt(self, results: list[dict], market: str, max_delivery_days: int) -> str:
+    @staticmethod
+    def _format_snippets(results: list[dict]) -> str:
+        """Renders the search results as the numbered title/description/url
+        block the extraction model sees. Shared with `last_search_text` so
+        --keep-raw records exactly the material the extraction worked from,
+        not a separate rendering that could drift from it.
+        """
         lines = []
         for index, result in enumerate(results, start=1):
             if not isinstance(result, dict):
@@ -181,7 +248,10 @@ class FirecrawlProvider:
             description = result.get("description", "")
             url = result.get("url", "")
             lines.append(f"{index}. {title}\n   {description}\n   {url}")
-        snippets = "\n".join(lines)
+        return "\n".join(lines)
+
+    def _build_extract_prompt(self, results: list[dict], market: str, max_delivery_days: int) -> str:
+        snippets = self._format_snippets(results)
         # min(): if max_delivery_days itself is below the generic default (1
         # or 2 days), the fallback must not exceed it either, or
         # validate_offer_fields would reject every unstated-delivery-time
