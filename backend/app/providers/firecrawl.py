@@ -31,6 +31,19 @@ MARKET_LOCATION_NAMES = {
     "PL": "Poland",
 }
 
+# Shopping-intent keywords appended to the search query for a known market.
+# Live-verified 2026-09-02: a bare product-name/EAN query is dominated by
+# manufacturer spec pages whose Firecrawl snippet never states a price (JS-
+# rendered price widgets aren't in the static meta description Firecrawl
+# scrapes) — appending local shopping words biases results toward listing/
+# price-comparison pages that DO state a price in the snippet text. Example:
+# "Słuchawki TWS Edifier W200T czarne" alone returned 0/20 results with a
+# visible PLN price; the same query + "cena zł" returned 6/10 with one.
+# Omitted for an unmapped market, same reasoning as MARKET_LOCATION_NAMES.
+MARKET_SHOPPING_TERMS = {
+    "PL": "cena zł",
+}
+
 # Conservative fallback for delivery_days when a search snippet doesn't state
 # one explicitly (see _build_extract_prompt) — a common domestic-shipping
 # estimate. validate_offer_fields still rejects it if it exceeds the
@@ -119,6 +132,9 @@ class FirecrawlProvider:
         # while name-only queries for less distinctive products returned
         # noisier results (see task brief).
         query = f"{product.ean} {product.name}" if product.ean else product.name
+        shopping_term = MARKET_SHOPPING_TERMS.get(market)
+        if shopping_term is not None:
+            query = f"{query} {shopping_term}"
         request_body: dict = {"query": query, "limit": SEARCH_RESULT_LIMIT}
         location = MARKET_LOCATION_NAMES.get(market)
         if location is not None:
@@ -262,11 +278,24 @@ class FirecrawlProvider:
             "product. Extract the cheapest genuine, currently-buyable offer described into the "
             "requested JSON schema. Prices and sellers are often stated directly in the "
             "description text.\n\n"
+            "source_url must be a specific product listing page for THIS product — never a "
+            "search-results page, a category/browse page, or a price-comparison hub page. If a "
+            "result's description shows a price but the result itself is a category or search "
+            "page (e.g. its title mentions a size/model range wider than this exact product, or "
+            "the URL clearly points at a search or category path), do not use that price — it "
+            "likely belongs to a different, unrelated item on that page, not this product. Only "
+            "extract a price you can verify is stated specifically for this exact product on its "
+            "own listing.\n\n"
             f"Only count an offer as valid if it is deliverable to a buyer in {market} within "
             f"{max_delivery_days} days — the seller can be based anywhere, as long as the listing "
             f"indicates it ships to {market} in time; do not reject an offer merely for being "
-            f"listed on a site not based in {market}. Report the price in the currency actually "
-            f'stated for that offer, not a converted or assumed one. Set "found" to false if none '
+            f"listed on a site not based in {market}. A listing on a marketplace or store that is "
+            f"clearly domestic to {market} (a country-specific domain, or a price already stated "
+            f"in {market}'s own local currency) should be treated as deliverable to {market} by "
+            f"default even when the snippet text never spells out a shipping destination — do not "
+            f"reject a domestic listing merely for not stating the obvious. Report the price in "
+            f'the currency actually stated for that offer, not a converted or assumed one. Set '
+            f'"found" to false if none '
             f"of the results describes a genuine current offer deliverable to {market} in time, or "
             f"if the only offer described has delivery_days greater than {max_delivery_days}. Only "
             "set delivery_days to a specific value when the description text actually supports it; "

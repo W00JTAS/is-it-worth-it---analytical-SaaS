@@ -105,7 +105,7 @@ def test_ean_first_query_when_ean_present():
         _make_product(ean="5901234123457", name="Widget"), market="PL", max_delivery_days=5,
     )
 
-    assert client.requests[0]["json"]["query"] == "5901234123457 Widget"
+    assert client.requests[0]["json"]["query"] == "5901234123457 Widget cena zł"
 
 
 def test_name_only_query_when_ean_absent():
@@ -117,7 +117,7 @@ def test_name_only_query_when_ean_absent():
 
     provider.find_cheapest(_make_product(ean=None, name="Widget"), market="PL", max_delivery_days=5)
 
-    assert client.requests[0]["json"]["query"] == "Widget"
+    assert client.requests[0]["json"]["query"] == "Widget cena zł"
 
 
 def test_location_present_for_mapped_market():
@@ -142,6 +142,34 @@ def test_location_absent_for_unmapped_market():
     provider.find_cheapest(_make_product(), market="XX", max_delivery_days=5)
 
     assert "location" not in client.requests[0]["json"]
+
+
+def test_shopping_term_appended_for_mapped_market():
+    client = _TwoServiceClient(
+        search_payload=_search_response([]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    provider.find_cheapest(
+        _make_product(ean=None, name="Widget"), market="PL", max_delivery_days=5,
+    )
+
+    assert client.requests[0]["json"]["query"] == "Widget cena zł"
+
+
+def test_shopping_term_absent_for_unmapped_market():
+    client = _TwoServiceClient(
+        search_payload=_search_response([]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    provider.find_cheapest(
+        _make_product(ean=None, name="Widget"), market="XX", max_delivery_days=5,
+    )
+
+    assert client.requests[0]["json"]["query"] == "Widget"
 
 
 def test_returns_none_and_skips_extraction_when_no_web_results():
