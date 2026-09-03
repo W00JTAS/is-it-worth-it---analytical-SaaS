@@ -34,6 +34,28 @@ MARKET_COUNTRY_NAMES = {
 # documented in .claude/rules/groq-compound-free-tier-reliability.md.
 SEARCH_MAX_TOKENS = 600
 
+# Token-diet caps for the EXTRACTION call (gpt-oss-20b), shared by both
+# GroqProvider._extract and FirecrawlProvider._extract — the two call sites
+# that hit this same model with the same fixed-instructions-plus-snippet
+# prompt shape. Measured live 2026-09-03 against a real stored search
+# snippet via _build_extract_prompt, three calls:
+#   1. no params (today's default): 1459 reasoning_tokens, 1579
+#      completion_tokens, 3759 total_tokens.
+#   2. reasoning_effort="low": 125 reasoning_tokens, 198 completion_tokens,
+#      2345 total_tokens — reasoning cut by ~91%.
+#   3. reasoning_effort="low" + max_tokens=350: 54 reasoning_tokens, 115
+#      completion_tokens, 2441 total_tokens, finish_reason="stop" — i.e. the
+#      350 cap did NOT truncate a genuine successful answer.
+# EXTRACT_MAX_TOKENS=500 leaves comfortable headroom over the observed
+# 115-198 completion tokens while still bounding a runaway far below the
+# uncapped sample's 1579. Full data at the time of measurement: see
+# .superpowers/sdd/kontynuuj-wczoraj-przerwa-em-prace-dynamic-feather/
+# progress.md's "Controller-run: live token measurement" section — but
+# that SDD workspace is deleted once this plan finishes, so the numbers
+# above are restated in full rather than only pointed to.
+EXTRACT_MAX_TOKENS = 500
+EXTRACT_REASONING_EFFORT = "low"
+
 logger = logging.getLogger(__name__)
 
 
@@ -161,6 +183,8 @@ class GroqProvider:
                         "type": "json_schema",
                         "json_schema": {"name": "cheapest_offer", "schema": RESPONSE_SCHEMA},
                     },
+                    "max_tokens": EXTRACT_MAX_TOKENS,
+                    "reasoning_effort": EXTRACT_REASONING_EFFORT,
                 },
             ))
             response_json = response.json()

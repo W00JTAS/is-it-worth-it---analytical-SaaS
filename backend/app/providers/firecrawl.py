@@ -9,7 +9,9 @@ import httpx
 from app.models.product import Product
 from app.providers.base import OfferResult, ProviderProfile, ProviderUnavailable
 from app.providers.groq import API_URL as GROQ_API_URL
+from app.providers.groq import EXTRACT_MAX_TOKENS as GROQ_EXTRACT_MAX_TOKENS
 from app.providers.groq import EXTRACT_MODEL as GROQ_EXTRACT_MODEL
+from app.providers.groq import EXTRACT_REASONING_EFFORT as GROQ_EXTRACT_REASONING_EFFORT
 from app.providers.parsing import RESPONSE_SCHEMA, validate_offer_fields
 from app.providers.retry import call_with_retry
 
@@ -214,6 +216,8 @@ class FirecrawlProvider:
                         "type": "json_schema",
                         "json_schema": {"name": "cheapest_offer", "schema": RESPONSE_SCHEMA},
                     },
+                    "max_tokens": GROQ_EXTRACT_MAX_TOKENS,
+                    "reasoning_effort": GROQ_EXTRACT_REASONING_EFFORT,
                 },
             ))
             response_json = response.json()

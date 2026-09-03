@@ -6,7 +6,7 @@ import pytest
 
 from app.models.product import Product
 from app.providers.base import ProviderAuthError, ProviderUnavailable
-from app.providers.groq import GroqProvider
+from app.providers.groq import EXTRACT_MAX_TOKENS, EXTRACT_REASONING_EFFORT, GroqProvider
 
 
 def _make_product(**overrides) -> Product:
@@ -221,6 +221,20 @@ def test_search_call_includes_positive_max_tokens():
     max_tokens = client.requests[0]["json"]["max_tokens"]
     assert isinstance(max_tokens, int)
     assert max_tokens > 0
+
+
+def test_extract_call_includes_max_tokens_and_reasoning_effort():
+    client = _TwoCallClient(
+        search_payload=_search_response("no offer found"),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = GroqProvider(api_key="test-key", client=client)
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    extract_body = client.requests[1]["json"]
+    assert extract_body["max_tokens"] == EXTRACT_MAX_TOKENS
+    assert extract_body["reasoning_effort"] == EXTRACT_REASONING_EFFORT
 
 
 def test_extract_model_constructor_override_is_used_in_extract_call():
