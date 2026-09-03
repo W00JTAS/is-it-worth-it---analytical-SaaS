@@ -1,3 +1,4 @@
+import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -61,19 +62,22 @@ describe('MappingStep', () => {
     expect(screen.getByText('...i 21 więcej')).toBeInTheDocument()
   })
 
-  it('re-fetches the preview with the edited mapping when Odśwież podgląd is clicked', async () => {
+  it('auto-refreshes the preview after a debounced delay when a mapping field changes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ delay: null })
     const spy = vi.spyOn(client, 'getCsvPreview').mockResolvedValue(PREVIEW)
     render(<MappingStep file={FILE} onConfirmed={vi.fn()} />)
     await screen.findByText('1 / 1 wierszy sparsowanych poprawnie')
 
-    await userEvent.selectOptions(screen.getByLabelText('EAN'), 'Kategoria')
-    await userEvent.click(screen.getByRole('button', { name: 'Odśwież podgląd' }))
+    await user.selectOptions(screen.getByLabelText('EAN'), 'Kategoria')
+    await act(() => vi.advanceTimersByTimeAsync(400))
 
     await waitFor(() =>
       expect(spy).toHaveBeenLastCalledWith(FILE, {
         name: 'Nazwa', wholesale_price: 'Cena hurtowa', ean: 'Kategoria', category: 'Kategoria', sku: 'SKU',
       }),
     )
+    vi.useRealTimers()
   })
 
   it('disables Dalej until all required fields are mapped, and confirms the current mapping when clicked', async () => {
@@ -108,6 +112,8 @@ describe('MappingStep', () => {
   // --- Fix 2 (final whole-branch review): in-flight request guard ---------
 
   it('disables all mapping selects and Dalej while a refresh request is in flight', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ delay: null })
     let resolveRefresh: (value: CsvPreview) => void = () => {}
     const spy = vi.spyOn(client, 'getCsvPreview')
     spy.mockResolvedValueOnce(PREVIEW)
@@ -117,7 +123,8 @@ describe('MappingStep', () => {
     spy.mockImplementationOnce(
       () => new Promise<CsvPreview>((resolve) => { resolveRefresh = resolve }),
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Odśwież podgląd' }))
+    await user.selectOptions(screen.getByLabelText('EAN'), 'Kategoria')
+    await act(() => vi.advanceTimersByTimeAsync(400))
 
     expect(screen.getByLabelText('Nazwa')).toBeDisabled()
     expect(screen.getByLabelText('Cena hurtowa')).toBeDisabled()
@@ -128,26 +135,28 @@ describe('MappingStep', () => {
 
     resolveRefresh(PREVIEW)
     await waitFor(() => expect(screen.getByLabelText('Nazwa')).toBeEnabled())
+    vi.useRealTimers()
   })
 
   // --- Fix 3 (final whole-branch review): a refresh response must not -----
   // --- silently revert a field the user already changed locally -----------
 
   it('does not let a refresh response overwrite the mapping the user chose locally', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ delay: null })
     let resolveRefresh: (value: CsvPreview) => void = () => {}
     const spy = vi.spyOn(client, 'getCsvPreview')
     spy.mockResolvedValueOnce(PREVIEW)
     render(<MappingStep file={FILE} onConfirmed={vi.fn()} />)
     await screen.findByText('1 / 1 wierszy sparsowanych poprawnie')
 
-    // User clears SKU back to "-- brak --" and hits refresh. The backend's
-    // response (still echoing the auto-detected SKU, since `or`-based
-    // merging can't tell "cleared" from "not sent") must NOT un-clear it.
-    await userEvent.selectOptions(screen.getByLabelText('SKU (opcjonalne)'), '')
+    // User clears SKU back to "-- brak --", which now triggers a debounced
+    // refresh on its own (no button to click anymore).
+    await user.selectOptions(screen.getByLabelText('SKU (opcjonalne)'), '')
     spy.mockImplementationOnce(
       () => new Promise<CsvPreview>((resolve) => { resolveRefresh = resolve }),
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Odśwież podgląd' }))
+    await act(() => vi.advanceTimersByTimeAsync(400))
 
     // Backend echoes the auto-detected SKU back, as `_merge_mapping`'s `or`
     // fallback would for a field sent as null.
@@ -155,5 +164,6 @@ describe('MappingStep', () => {
     await waitFor(() => expect(screen.getByLabelText('Nazwa')).toBeEnabled())
 
     expect(screen.getByLabelText('SKU (opcjonalne)')).toHaveValue('')
+    vi.useRealTimers()
   })
 })

@@ -34,12 +34,13 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   // Guards against a stale loadPreview response overwriting a newer one --
-  // e.g. the user edits a dropdown while a previously-triggered "Odśwież
-  // podgląd" request is still in flight. The dropdowns are also disabled
+  // e.g. the user edits a dropdown while a previously-triggered debounced
+  // refresh request is still in flight. The dropdowns are also disabled
   // while `isLoading` (primary fix, see the `disabled={isLoading}` selects
   // below); this counter is defense in depth in case that disabling is ever
   // bypassed or removed. Mirrors ScopeEstimateStep's estimateRequestIdRef.
   const previewRequestIdRef = useRef(0)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadPreview = useCallback(async (override?: ColumnMapping) => {
     const requestId = ++previewRequestIdRef.current
@@ -72,19 +73,25 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
     }
   }, [file])
 
-  // Runs once, on mount, for pure auto-detection. Every later refresh is the
-  // explicit "Odśwież podgląd" button below -- never triggered by editing a
-  // dropdown, matching the explicit-recompute pattern used throughout this wizard.
+  // Runs once, on mount, for pure auto-detection. Every later refresh is
+  // triggered by handleFieldChange's debounce below, not by this effect.
   useEffect(() => {
     loadPreview()
   }, [loadPreview])
 
-  function handleFieldChange(field: keyof ColumnMapping, value: string) {
-    setMapping({ ...mapping, [field]: value || null })
-  }
+  // Cleans up a pending debounce timer on unmount so it can't fire loadPreview
+  // (and thus setState) after the component is gone.
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    }
+  }, [])
 
-  function handleRefresh() {
-    loadPreview(mapping)
+  function handleFieldChange(field: keyof ColumnMapping, value: string) {
+    const next = { ...mapping, [field]: value || null }
+    setMapping(next)
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    debounceTimerRef.current = setTimeout(() => loadPreview(next), 400)
   }
 
   const requiredFilled = Boolean(
@@ -172,9 +179,6 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                 </select>
               </label>
             </div>
-            <Button type="button" onClick={handleRefresh} disabled={isLoading} className="self-start">
-              Odśwież podgląd
-            </Button>
           </section>
 
           <section className="flex flex-col gap-2 text-sm text-muted-foreground">
