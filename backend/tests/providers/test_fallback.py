@@ -194,6 +194,30 @@ def test_rate_limit_on_primary_falls_back_and_latches_primary_off():
     assert secondary.call_count == 2
 
 
+def test_reset_re_enables_primary_after_a_latch():
+    # A caller that reuses one FallbackProvider instance across multiple
+    # logical runs (e.g. app.scans.api's process-wide singleton, reused
+    # across every scan) must be able to give primary a fresh chance each
+    # run -- otherwise one rate limit anywhere permanently shifts every
+    # later run onto secondary for the life of the process.
+    primary = _FakeProvider("primary", ProviderRateLimited("daily wall", retry_after=1800.0))
+    secondary_offer = _make_offer("Secondary Seller")
+    secondary = _FakeProvider("secondary", secondary_offer)
+    provider = FallbackProvider(primary, secondary)
+
+    provider.find_cheapest(_make_product(), "PL", 5)
+    assert provider._primary_disabled is True
+
+    provider.reset()
+    assert provider._primary_disabled is False
+
+    primary._outcome = _make_offer("Primary Seller")  # primary "recovered"
+    result = provider.find_cheapest(_make_product(), "PL", 5)
+
+    assert result.seller == "Primary Seller"
+    assert primary.call_count == 2  # consulted again after reset, not skipped
+
+
 def test_plain_provider_unavailable_does_not_latch_primary_off():
     # Only a rate limit means "primary's budget is gone". An ordinary
     # transient failure (timeout, 5xx) must still let the next product try

@@ -17,6 +17,18 @@ async def run_scan(
     max_delivery_days: int,
     max_concurrency: int,
 ) -> None:
+    # FallbackProvider's rate-limit latch is scoped to "one run" by design
+    # (see its class docstring) but a provider instance built by
+    # app.scans.api.get_provider() is a process-wide singleton reused across
+    # every scan. Without this reset, one rate limit anywhere would silently
+    # and permanently shift every later scan onto the costlier secondary for
+    # the rest of the process's uptime. Providers that don't have this
+    # concept (everything except FallbackProvider) simply don't define
+    # reset(), so this is a no-op for them.
+    reset = getattr(provider, "reset", None)
+    if reset is not None:
+        reset()
+
     store.start_scan(scan_id)
     pending = store.list_pending(scan_id)
     semaphore = asyncio.Semaphore(max_concurrency)

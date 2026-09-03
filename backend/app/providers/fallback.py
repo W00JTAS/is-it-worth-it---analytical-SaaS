@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from app.models.product import Product
 from app.providers.base import (
     OfferResult,
@@ -10,18 +12,35 @@ from app.providers.base import (
     ProviderUnavailable,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class FallbackProvider:
     """Wraps two `PriceProvider`-shaped objects: tries `primary` first (meant
     to be the free-but-quota-constrained provider), and only consults
-    `secondary` (meant to be the costlier but quota-independent provider)
-    when primary comes back empty or fails transiently. Deliberately
-    provider-agnostic — works with any structurally-conformant PriceProvider,
-    not just GroqProvider/FirecrawlProvider.
+    `secondary` when primary comes back empty or fails transiently.
+    Deliberately provider-agnostic — works with any structurally-conformant
+    PriceProvider, not just GroqProvider/FirecrawlProvider.
+
+    `secondary` is NOT necessarily quota-independent of `primary` — with
+    today's GroqProvider+FirecrawlProvider composition it explicitly is not:
+    FirecrawlProvider._extract calls the same Groq extraction model
+    (gpt-oss-20b) GroqProvider._extract does, so the two sub-providers share
+    that model's daily token budget even though only `primary`'s SEARCH step
+    (compound-mini) is genuinely independent. See
+    .claude/rules/groq-compound-free-tier-reliability.md's fifth update.
 
     One stateful exception to "try primary first": a ProviderRateLimited from
-    primary latches it off permanently for this instance — see find_cheapest
-    for why, and for what that would need before production use.
+    primary latches it off for this instance — see find_cheapest for why —
+    until `reset()` is called. Call `reset()` once per logical "run" (e.g.
+    once per scan, not once per process): the latch was designed around
+    provider_eval.py's one-shot CLI usage, where "for this instance" and
+    "for this run" were the same thing. A caller that keeps one
+    FallbackProvider instance alive across many runs (e.g. a long-lived
+    server process reusing it via a module-level singleton) MUST call
+    `reset()` at the start of each run, or a single rate limit anywhere
+    permanently and silently shifts every later run onto the costlier
+    secondary for the rest of the process's uptime.
     """
 
     def __init__(self, primary: PriceProvider, secondary: PriceProvider):
@@ -61,6 +80,15 @@ class FallbackProvider:
         """
         return getattr(self._last_used, "last_search_text", None)
 
+    def reset(self) -> None:
+        """Re-enables primary if a prior run's rate limit had latched it
+        off. Callers that reuse one FallbackProvider instance across
+        multiple logical runs (see class docstring) must call this at the
+        start of each run — otherwise the latch, designed for a one-shot
+        script's lifetime, silently outlives the run that tripped it.
+        """
+        self._primary_disabled = False
+
     def find_cheapest(
         self, product: Product, market: str, max_delivery_days: int
     ) -> OfferResult | None:
@@ -88,19 +116,20 @@ class FallbackProvider:
             # of this instance's life instead of paying the full retry
             # backoff again on every remaining product.
             #
-            # Deliberately permanent, with no timed re-enable from
-            # retry_after: provider_eval.py builds a fresh FallbackProvider
-            # per script run, so "for this instance" == "for this run".
-            #
-            # ARCHITECTURE NOTE: this means a scan using this provider will
-            # silently never re-consult primary after a single rate limit.
-            # That is the right trade-off for the eval harness (where the
-            # alternative is burning the whole run on backoff sleeps), but
-            # before this class is ever wired into production scanning
-            # (app/scans/engine.py, app/providers/lookup.py) the latch needs
-            # visibility — telemetry, or a surfaced "primary disabled at
-            # product N" signal — otherwise a cost/quality regression would
-            # be invisible to the operator.
+            # Deliberately permanent for the rest of THIS run, with no timed
+            # re-enable from retry_after: paying the full retry backoff
+            # again on every remaining product would burn the whole run for
+            # no better odds. Callers that reuse one instance across
+            # multiple runs (see class docstring) must call reset() between
+            # runs — app/scans/engine.py's run_scan does this at the start
+            # of every scan, so the latch doesn't outlive the run that
+            # tripped it. Also logged (below), so an operator watching logs
+            # can see the cost/quality shift instead of it being invisible.
+            logger.warning(
+                "%s rate-limited; disabling it for the rest of this run, "
+                "falling back to %s for every remaining lookup",
+                self.primary.name, self.secondary.name,
+            )
             self._primary_disabled = True
             return self._via_secondary(product, market, max_delivery_days)
         except ProviderUnavailable:
