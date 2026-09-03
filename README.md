@@ -44,7 +44,8 @@ CatalogSource → Normalize → Scope+Estimate → Price Discovery → Margin En
 - **Price discovery** — pluggable AI provider (`PROVIDER` env var): Perplexity Sonar
   (default, paid), Groq's free tier alone (`compound-mini` + `gpt-oss-20b`, two-call
   search-then-extract), or `groq+firecrawl` (Groq primary, falls back to Firecrawl once Groq's
-  free tier rate-limits — see `.claude/rules/groq-compound-free-tier-reliability.md` for measured
+  search step rate-limits — the two don't fully avoid sharing quota, since Firecrawl's own
+  extraction step still calls Groq's extraction model — see `.claude/rules/groq-compound-free-tier-reliability.md` for measured
   found-rates; free tier is demo-scale only, not sized for a full catalog scan). A SQLite cache
   keyed on `(ean, market, provider, max_delivery_days)` means you never pay twice for the same
   lookup, shared across whichever provider is active.

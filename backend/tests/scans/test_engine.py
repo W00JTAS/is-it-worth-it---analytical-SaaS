@@ -72,6 +72,20 @@ class _ScriptedProvider:
             self._in_flight -= 1
 
 
+class _ResettableProvider(_ScriptedProvider):
+    """Like _ScriptedProvider, but also exposes the optional reset() hook
+    FallbackProvider defines (see app/providers/fallback.py) -- used to
+    verify run_scan calls it via getattr duck-typing, without needing a
+    real FallbackProvider/GroqProvider/FirecrawlProvider in this test."""
+
+    def __init__(self, script: dict[str, object]):
+        super().__init__(script)
+        self.reset_call_count = 0
+
+    def reset(self) -> None:
+        self.reset_call_count += 1
+
+
 def _make_store_with_products(tmp_path, products, *, max_concurrency=5):
     store = ScanStore(tmp_path / "app.sqlite3")
     estimate = estimate_cost(
@@ -97,6 +111,47 @@ def test_run_scan_marks_all_products_done_and_finalizes(tmp_path):
     assert store.list_pending(scan_id) == []
     assert store.get_scan(scan_id).status == ScanStatus.DONE
     assert store.get_scan(scan_id).completed_products == 1
+    store.close()
+    cache.close()
+
+
+def test_run_scan_resets_provider_fallback_state_at_the_start_of_every_call(tmp_path):
+    # FallbackProvider's rate-limit latch is meant to last "one run" (see its
+    # class docstring), but app.scans.api.get_provider() reuses one instance
+    # across every scan in the process. run_scan must call the optional
+    # reset() hook at the start of each invocation -- including a resumed
+    # scan's second call -- so a rate limit from an earlier scan doesn't
+    # silently and permanently disable primary for the rest of the process.
+    products = [_make_product(external_id="1", ean="5901234123457")]
+    store, scan_id = _make_store_with_products(tmp_path, products)
+    cache = PriceCache(tmp_path / "app.sqlite3")
+    provider = _ResettableProvider({"5901234123457": _make_offer()})
+
+    asyncio.run(run_scan(scan_id, store, cache, provider, "PL", 5, max_concurrency=5))
+    assert provider.reset_call_count == 1
+
+    # A second run_scan call for the same (now-done) scan_id -- e.g. a
+    # resume -- must reset again, not rely on the first call's reset.
+    asyncio.run(run_scan(scan_id, store, cache, provider, "PL", 5, max_concurrency=5))
+    assert provider.reset_call_count == 2
+
+    store.close()
+    cache.close()
+
+
+def test_run_scan_tolerates_a_provider_with_no_reset_hook(tmp_path):
+    # Plain providers (GroqProvider alone, PerplexityProvider) have no
+    # reset() -- run_scan's getattr-based call must be a no-op for them,
+    # not an AttributeError.
+    products = [_make_product(external_id="1", ean="5901234123457")]
+    store, scan_id = _make_store_with_products(tmp_path, products)
+    cache = PriceCache(tmp_path / "app.sqlite3")
+    provider = _ScriptedProvider({"5901234123457": _make_offer()})
+    assert not hasattr(provider, "reset")
+
+    asyncio.run(run_scan(scan_id, store, cache, provider, "PL", 5, max_concurrency=5))
+
+    assert store.get_scan(scan_id).status == ScanStatus.DONE
     store.close()
     cache.close()
 
