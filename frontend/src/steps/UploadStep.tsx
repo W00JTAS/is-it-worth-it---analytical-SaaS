@@ -39,6 +39,15 @@ export function UploadStep({ onFileSelected, onSampleSelected }: UploadStepProps
   // `onSampleSelected` after the fact.
   const isMountedRef = useRef(true)
   useEffect(() => {
+    // Reset (not just rely on the useRef initializer) because React's
+    // StrictMode double-invokes effects in development -- mount, cleanup,
+    // mount again -- to surface exactly this class of bug. Without this
+    // line, the cleanup from StrictMode's first simulated unmount leaves
+    // isMountedRef.current permanently false for the component's real
+    // lifetime, silently breaking every guarded code path below (observed:
+    // the sample-loading state got stuck forever, since both the success
+    // callback and the loading-state reset were skipped).
+    isMountedRef.current = true
     return () => { isMountedRef.current = false }
   }, [])
 

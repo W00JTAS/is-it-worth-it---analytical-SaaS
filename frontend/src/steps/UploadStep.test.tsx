@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -84,5 +85,32 @@ describe('UploadStep sample-trial cards', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(onSampleSelected).not.toHaveBeenCalled()
+  })
+
+  // --- Regression: StrictMode's dev-mode double-effect-invoke must not ----
+  // --- permanently disarm the unmount guard added by the fix above --------
+
+  it('completes a sample fetch normally under StrictMode (double-invoked effects)', async () => {
+    const csvBody = '"SKU";"ean";"nazwa";"kategoria";"cena"\n"A1";"5901234123457";"Czajnik";"AGD";"99.00"\n'
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob([csvBody], { type: 'text/csv' })),
+    }) as unknown as typeof fetch
+    const onSampleSelected = vi.fn()
+    render(
+      <StrictMode>
+        <UploadStep onFileSelected={vi.fn()} onSampleSelected={onSampleSelected} />
+      </StrictMode>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /kuchnia/i }))
+
+    // Without resetting isMountedRef.current at the top of the effect,
+    // StrictMode's simulated mount->cleanup->mount leaves the guard
+    // permanently tripped even though the component is genuinely mounted --
+    // onSampleSelected would never fire and the button would stay on
+    // "Wczytywanie…" forever.
+    await waitFor(() => expect(onSampleSelected).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('button', { name: /kuchnia/i })).not.toHaveTextContent('Wczytywanie')
   })
 })
