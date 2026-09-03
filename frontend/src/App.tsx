@@ -36,6 +36,11 @@ function App() {
             setFile(selected)
             setStep('mapping')
           }}
+          onSampleSelected={(selected, mapping) => {
+            setFile(selected)
+            setColumnMapping(mapping)
+            setStep('scope')
+          }}
         />
       )}
       <StepErrorBoundary>

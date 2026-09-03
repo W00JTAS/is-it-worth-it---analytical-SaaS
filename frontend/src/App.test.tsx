@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
@@ -6,6 +6,12 @@ import * as client from './api/client'
 import * as useScanEventsModule from './api/useScanEvents'
 
 describe('App (ScanWizard)', () => {
+  const originalFetch = globalThis.fetch
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
   it('walks from upload through scope+estimate to progress', async () => {
     vi.spyOn(client, 'createScan').mockResolvedValue({
       scan_id: 'scan-1', status: 'estimated', scope_type: 'full',
@@ -124,5 +130,19 @@ describe('App (ScanWizard)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Zobacz raport' }))
 
     expect(await screen.findByText('+10.0%')).toBeInTheDocument()
+  })
+
+  it('skips MappingStep and lands on ScopeEstimateStep when a sample category is chosen', async () => {
+    const csvBody = '"SKU";"ean";"nazwa";"kategoria";"cena"\n"A1";"5901234123457";"Czajnik";"AGD";"99.00"\n'
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob([csvBody], { type: 'text/csv' })),
+    }) as unknown as typeof fetch
+
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /kuchnia/i }))
+
+    await screen.findByRole('heading', { name: 'Zakres skanu' })
+    expect(screen.queryByRole('heading', { name: 'Mapowanie kolumn' })).not.toBeInTheDocument()
   })
 })
