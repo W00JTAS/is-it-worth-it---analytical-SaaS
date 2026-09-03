@@ -64,4 +64,25 @@ describe('UploadStep sample-trial cards', () => {
     expect(screen.getByRole('button', { name: /zabawki/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /elektronika/i })).toBeInTheDocument()
   })
+
+  // --- Final whole-branch review, Fix 1: unmount guard --------------------
+
+  it('does not call onSampleSelected if the component unmounts before the sample fetch resolves', async () => {
+    let resolveFetch: (value: { ok: boolean; blob: () => Promise<Blob> }) => void = () => {}
+    globalThis.fetch = vi.fn().mockReturnValue(
+      new Promise((resolve) => { resolveFetch = resolve }),
+    ) as unknown as typeof fetch
+    const onSampleSelected = vi.fn()
+    const { unmount } = render(<UploadStep onFileSelected={vi.fn()} onSampleSelected={onSampleSelected} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /kuchnia/i }))
+
+    unmount()
+
+    const csvBody = '"SKU";"ean";"nazwa";"kategoria";"cena"\n"A1";"5901234123457";"Czajnik";"AGD";"99.00"\n'
+    resolveFetch({ ok: true, blob: () => Promise.resolve(new Blob([csvBody], { type: 'text/csv' })) })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(onSampleSelected).not.toHaveBeenCalled()
+  })
 })

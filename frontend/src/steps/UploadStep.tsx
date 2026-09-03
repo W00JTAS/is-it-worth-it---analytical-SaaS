@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Cpu, ToyBrick, UtensilsCrossed, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,15 @@ export function UploadStep({ onFileSelected, onSampleSelected }: UploadStepProps
   const [file, setFile] = useState<File | null>(null)
   const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null)
   const [sampleError, setSampleError] = useState<string | null>(null)
+  // Guards against a sample fetch that outlives this component -- e.g. the
+  // user clicks a sample card, the fetch is slow, they upload their own file
+  // instead (advancing `App` past `UploadStep`, unmounting it), then the
+  // fetch resolves from a stale closure and would otherwise silently call
+  // `onSampleSelected` after the fact.
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    return () => { isMountedRef.current = false }
+  }, [])
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     setFile(event.target.files?.[0] ?? null)
@@ -44,12 +53,13 @@ export function UploadStep({ onFileSelected, onSampleSelected }: UploadStepProps
       const response = await fetch(`/samples/${category.id}.csv`)
       if (!response.ok) throw new Error(`sample fetch failed: ${response.status}`)
       const blob = await response.blob()
+      if (!isMountedRef.current) return
       const sampleFile = new File([blob], `${category.id}.csv`, { type: 'text/csv' })
       onSampleSelected(sampleFile, SAMPLE_COLUMN_MAPPING)
     } catch {
-      setSampleError('Nie udało się wczytać przykładowej próbki')
+      if (isMountedRef.current) setSampleError('Nie udało się wczytać przykładowej próbki')
     } finally {
-      setLoadingSampleId(null)
+      if (isMountedRef.current) setLoadingSampleId(null)
     }
   }
 
