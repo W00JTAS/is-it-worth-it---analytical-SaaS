@@ -118,5 +118,11 @@ describe('PaginatedList', () => {
     expect(listItems[0]).toHaveTextContent('item-0')
     expect(listItems[4]).toHaveTextContent('item-4')
     expect(listItems[5]).toHaveTextContent('item-5')
+
+    // DOM order alone can't tell a column-major grid from a plain list — jsdom does no layout —
+    // so assert the grid CSS was actually applied, not just that item order held.
+    const list = screen.getByRole('list')
+    expect(list.className).toContain('grid-flow-col')
+    expect(list).toHaveStyle({ gridTemplateRows: 'repeat(5, minmax(0, auto))' })
   })
 })
