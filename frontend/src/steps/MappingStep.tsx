@@ -91,7 +91,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
     const next = { ...mapping, [field]: value || null }
     setMapping(next)
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
-    debounceTimerRef.current = setTimeout(() => loadPreview(next), 400)
+    debounceTimerRef.current = setTimeout(() => loadPreview(next), 800)
   }
 
   const requiredFilled = Boolean(
@@ -191,7 +191,6 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                   <PaginatedList
                     items={preview.warnings}
                     pageSize={10}
-                    columns={2}
                     renderItem={(warning) => <span className="text-warning">{warning}</span>}
                   />
                   {preview.warning_count > preview.warnings.length && (

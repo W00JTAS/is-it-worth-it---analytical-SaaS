@@ -70,7 +70,7 @@ describe('MappingStep', () => {
     await screen.findByText('1 / 1 wierszy sparsowanych poprawnie')
 
     await user.selectOptions(screen.getByLabelText('EAN'), 'Kategoria')
-    await act(() => vi.advanceTimersByTimeAsync(400))
+    await act(() => vi.advanceTimersByTimeAsync(800))
 
     await waitFor(() =>
       expect(spy).toHaveBeenLastCalledWith(FILE, {
@@ -124,7 +124,7 @@ describe('MappingStep', () => {
       () => new Promise<CsvPreview>((resolve) => { resolveRefresh = resolve }),
     )
     await user.selectOptions(screen.getByLabelText('EAN'), 'Kategoria')
-    await act(() => vi.advanceTimersByTimeAsync(400))
+    await act(() => vi.advanceTimersByTimeAsync(800))
 
     expect(screen.getByLabelText('Nazwa')).toBeDisabled()
     expect(screen.getByLabelText('Cena hurtowa')).toBeDisabled()
@@ -150,13 +150,19 @@ describe('MappingStep', () => {
     render(<MappingStep file={FILE} onConfirmed={vi.fn()} />)
     await screen.findByText('1 / 1 wierszy sparsowanych poprawnie')
 
-    // User clears SKU back to "-- brak --", which now triggers a debounced
-    // refresh on its own (no button to click anymore).
-    await user.selectOptions(screen.getByLabelText('SKU (opcjonalne)'), '')
+    // Register the pending-promise mock BEFORE selectOptions -- selectOptions
+    // synchronously fires handleFieldChange, which schedules the debounce
+    // timer. Registering the mock after that (as this test originally did)
+    // races the timer: under `shouldAdvanceTime: true`, if the timer fired
+    // before this mock was in place, the un-mocked resolved default would be
+    // hit instead of this controllable pending promise.
     spy.mockImplementationOnce(
       () => new Promise<CsvPreview>((resolve) => { resolveRefresh = resolve }),
     )
-    await act(() => vi.advanceTimersByTimeAsync(400))
+    // User clears SKU back to "-- brak --", which now triggers a debounced
+    // refresh on its own (no button to click anymore).
+    await user.selectOptions(screen.getByLabelText('SKU (opcjonalne)'), '')
+    await act(() => vi.advanceTimersByTimeAsync(800))
 
     // Backend echoes the auto-detected SKU back, as `_merge_mapping`'s `or`
     // fallback would for a field sent as null.
