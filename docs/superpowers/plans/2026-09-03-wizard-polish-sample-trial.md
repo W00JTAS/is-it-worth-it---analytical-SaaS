@@ -84,9 +84,7 @@ with:
             <span className="flex items-baseline overflow-hidden px-2 py-1 text-sm font-semibold tracking-tight">
               <span>IS</span>
               <span className="grid grid-cols-[1fr] transition-[grid-template-columns] duration-200 ease-linear group-data-[collapsible=icon]:grid-cols-[0fr]">
-                <span className="min-w-0 overflow-hidden whitespace-nowrap">
-                  <span className="pl-1">IT WORTH IT</span>
-                </span>
+                <span className="min-w-0 overflow-hidden whitespace-nowrap">{' IT WORTH IT'}</span>
               </span>
               <span>?</span>
             </span>
