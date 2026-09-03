@@ -109,22 +109,50 @@ SIMPLE_RESULTS = [
 def test_parser_round_trips_a_synthetic_multi_result_block():
     results = [
         {"title": "Shop A", "description": "Cena: 19.99 zl", "url": "https://a.example/p"},
-        {
-            # The embedded "5. line" reads exactly like a boundary
-            # ("^\\d+\\. "), but 5 is not the next expected number (3, at
-            # this point in the sequence) — this exercises the guard in
-            # _find_block_boundaries that only a strictly-increasing-from-1
-            # match counts as a real boundary, so this stays content.
-            "title": "Shop B",
-            "description": "Multi-line description\nwith an embedded\nnumbered-looking 5. line",
-            "url": "https://b.example/p",
-        },
+        {"title": "Shop B", "description": "Multi-line\ndescription\ntext", "url": "https://b.example/p"},
         {"title": "Shop C", "description": "", "url": "https://c.example/p"},
     ]
     raw_text = _raw_text_for(results)
 
     parsed = replay_extract.parse_and_validate(raw_text)
 
+    assert parsed == results
+    assert FirecrawlProvider._format_snippets(parsed) == raw_text
+
+
+def test_parser_boundary_guard_rejects_out_of_sequence_numbered_line_inside_a_description():
+    # A line that DOES start with "N. " — matching the boundary regex's
+    # shape exactly — but whose N is not the next expected number must be
+    # rejected as a boundary and absorbed as description content instead.
+    # This is the actual guard _find_block_boundaries documents; the
+    # previous version of this test used a line that never matched the
+    # regex at all ("numbered-looking 5. line" doesn't start with a digit),
+    # so it never reached the numeric-comparison branch — caught in review.
+    #
+    # The false-positive-shaped line can only land at column 0 (no leading
+    # "   " indent) if it's NOT the first line of the description — the
+    # first description line always carries _format_snippets's 3-space
+    # indent, so it can never itself match ^\d+\. . Embedding it as the
+    # SECOND line of a multi-line description puts it exactly where a real
+    # boundary line would be.
+    results = [
+        {
+            "title": "Shop A",
+            "description": "first line here\n5. Something unrelated\nmore text",
+            "url": "https://a.example/p",
+        },
+        {"title": "Shop B", "description": "normal description", "url": "https://b.example/p"},
+    ]
+    raw_text = _raw_text_for(results)
+
+    parsed = replay_extract.parse_and_validate(raw_text)
+
+    # The guard held: exactly 2 entries recovered (not 3 — the "5. "
+    # line inside Shop A's description was never treated as a real
+    # boundary), matching the original titles/descriptions/urls
+    # byte-for-byte, including the embedded false-positive-shaped line.
+    assert parsed is not None
+    assert len(parsed) == 2
     assert parsed == results
     assert FirecrawlProvider._format_snippets(parsed) == raw_text
 
@@ -451,6 +479,42 @@ def test_budget_exhausted_mid_retry_stops_without_recording_the_entry(monkeypatc
     assert status_counts == {}
     assert checked == {}  # entry left unresolved, no partial/sentinel state
     assert not out_path.exists()  # nothing was ever written for it
+
+
+# --- checkpoint write is atomic (crash-survival is this script's whole point) -
+
+def test_write_output_writes_valid_json_and_leaves_no_temp_file_behind(tmp_path):
+    out_path = tmp_path / "out.json"
+
+    replay_extract._write_output(out_path, Path("source.json"), {"SKU-1": {"status": "match"}})
+
+    data = json.loads(out_path.read_text())
+    assert data == {"source": "source.json", "checked": {"SKU-1": {"status": "match"}}}
+    # No leftover .out.json.tmp<pid> sibling after a successful write.
+    assert list(tmp_path.glob(".out.json.tmp*")) == []
+
+
+def test_write_output_never_corrupts_an_existing_file_if_the_swap_is_interrupted(monkeypatch, tmp_path):
+    # Simulates a crash between "temp file written" and "renamed into
+    # place" — the exact scenario the atomic write exists to survive (see
+    # .claude/rules/sdd-interrupted-by-account-limit.md). The destination
+    # must be left exactly as it was before this call — the old complete
+    # content — never truncated and never partially overwritten, since
+    # os.replace() is the only step that touches out_path itself.
+    out_path = tmp_path / "out.json"
+    original = json.dumps({"source": "source.json", "checked": {"SKU-1": {"status": "match"}}}, indent=2)
+    out_path.write_text(original)
+
+    def _boom(*a, **k):
+        raise OSError("simulated crash between temp-write and rename")
+
+    monkeypatch.setattr("os.replace", _boom)
+
+    with pytest.raises(OSError):
+        replay_extract._write_output(out_path, Path("source.json"), {"SKU-2": {"status": "match"}})
+
+    # Destination untouched — still the OLD content, byte-for-byte.
+    assert out_path.read_text() == original
 
 
 # --- auth error aborts the whole run, not just one entry ---------------------

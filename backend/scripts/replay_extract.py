@@ -258,8 +258,20 @@ def build_provider(groq_api_key: str) -> FirecrawlProvider:
 
 
 def _write_output(out_path: Path, source_path: Path, checked: dict) -> None:
+    """Writes the checkpoint atomically: the whole point of writing after
+    every entry is surviving a mid-run kill (session limit, Ctrl-C, crash —
+    see .claude/rules/sdd-interrupted-by-account-limit.md), and a plain
+    write_text() can itself be killed mid-write, leaving truncated/corrupt
+    JSON that then crashes the NEXT invocation's resume-read. Writing to a
+    sibling temp file and os.replace()-ing it into place is atomic on
+    POSIX (same filesystem, same directory) — out_path either has the old
+    complete content or the new complete content, never a partial write.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps({"source": str(source_path), "checked": checked}, indent=2))
+    payload = json.dumps({"source": str(source_path), "checked": checked}, indent=2)
+    tmp_path = out_path.with_name(f".{out_path.name}.tmp{os.getpid()}")
+    tmp_path.write_text(payload)
+    os.replace(tmp_path, out_path)
 
 
 def run_replay(
@@ -383,7 +395,17 @@ def main(argv: list[str] | None = None) -> None:
 
     checked: dict[str, dict] = {}
     if out_path.exists():
-        checked = json.loads(out_path.read_text()).get("checked", {})
+        # The atomic write in _write_output means a file at rest here should
+        # never be truncated/corrupt from OUR OWN writes — but defend
+        # against corruption from some other cause (a manual edit, a copy
+        # interrupted by something outside this script) rather than crash
+        # the whole invocation on a resume. Treat an unreadable file the
+        # same as "no prior file": start fresh rather than lose the run.
+        try:
+            checked = json.loads(out_path.read_text()).get("checked", {})
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"WARNING: {out_path} exists but is not valid JSON ({exc}); "
+                  f"starting this invocation with no prior progress")
 
     eligible = [
         e for e in source_results
