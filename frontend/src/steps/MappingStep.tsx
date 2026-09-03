@@ -99,7 +99,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
   )
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 p-8">
+    <div className="mx-auto flex max-w-[2200px] flex-col gap-6 p-8">
       <h1 className="text-xl font-semibold text-foreground">Mapowanie kolumn</h1>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
