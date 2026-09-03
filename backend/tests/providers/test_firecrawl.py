@@ -8,6 +8,7 @@ from app.models.product import Product
 from app.providers.base import ProviderAuthError, ProviderRateLimited, ProviderUnavailable
 from app.providers.firecrawl import SEARCH_API_URL, FirecrawlProvider
 from app.providers.groq import API_URL as GROQ_API_URL
+from app.providers.groq import EXTRACT_MAX_TOKENS, EXTRACT_REASONING_EFFORT
 
 
 def _make_product(**overrides) -> Product:
@@ -310,6 +311,22 @@ def test_extract_prompt_clamps_default_delivery_days_to_max_delivery_days():
 
     prompt = client.requests[1]["json"]["messages"][0]["content"]
     assert "use 1 as a conservative default" in prompt
+
+
+def test_extract_call_includes_max_tokens_and_reasoning_effort():
+    client = _TwoServiceClient(
+        search_payload=_search_response([
+            {"title": "Example Shop", "description": "89.99 PLN", "url": "https://example.com/product"},
+        ]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    extract_body = client.requests[1]["json"]
+    assert extract_body["max_tokens"] == EXTRACT_MAX_TOKENS
+    assert extract_body["reasoning_effort"] == EXTRACT_REASONING_EFFORT
 
 
 def test_extract_model_constructor_override_is_used_in_extract_call():
