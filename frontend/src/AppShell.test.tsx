@@ -145,4 +145,24 @@ describe('AppShell', () => {
     fireEvent.blur(hoverRegion)
     expect(sidebar).toHaveAttribute('data-state', 'collapsed')
   })
+
+  it('shows a compact "IS?" mark, with the full title as one text node when expanded', () => {
+    render(
+      <AppShell currentStep="upload">
+        <p>content</p>
+      </AppShell>
+    )
+
+    // A custom matcher, not `getByText('IS').closest('span')`: "IS" is itself
+    // wrapped in its own leaf <span>, so `.closest('span')` on that match
+    // returns itself (textContent "IS"), not the outer wrapper. This matcher
+    // instead finds the one <span> whose OWN full textContent is the
+    // complete title — uniquely the outermost wrapper, since no other <span>
+    // in the tree (including the ancestor SidebarHeader, which is a <div>)
+    // has that exact combined text.
+    const header = screen.getByText(
+      (content, element) => element?.tagName.toLowerCase() === 'span' && content === 'IS IT WORTH IT?'
+    )
+    expect(header).toBeInTheDocument()
+  })
 })
