@@ -99,4 +99,24 @@ describe('PaginatedList', () => {
     // Should not have pagination (all items fit on one page)
     expect(screen.queryByRole('navigation', { name: /pagination/i })).not.toBeInTheDocument()
   })
+
+  it('renders items in 2 grid columns, column-major, when columns={2}', () => {
+    const items = Array.from({ length: 10 }, (_, i) => `item-${i}`)
+    render(
+      <PaginatedList
+        items={items}
+        pageSize={10}
+        columns={2}
+        renderItem={(item) => <span>{item}</span>}
+      />
+    )
+
+    const listItems = screen.getAllByRole('listitem')
+    expect(listItems).toHaveLength(10)
+    // Column-major fill: item-0..item-4 are the first column, item-5..item-9 the second —
+    // NOT row-major (item-0, item-1 side by side).
+    expect(listItems[0]).toHaveTextContent('item-0')
+    expect(listItems[4]).toHaveTextContent('item-4')
+    expect(listItems[5]).toHaveTextContent('item-5')
+  })
 })

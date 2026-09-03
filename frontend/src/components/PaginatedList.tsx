@@ -12,9 +12,10 @@ interface PaginatedListProps<T> {
   pageSize: number
   renderItem: (item: T, index: number) => ReactNode
   emptyState?: ReactNode
+  columns?: number
 }
 
-export function PaginatedList<T>({ items, pageSize, renderItem, emptyState }: PaginatedListProps<T>) {
+export function PaginatedList<T>({ items, pageSize, renderItem, emptyState, columns = 1 }: PaginatedListProps<T>) {
   const [page, setPage] = useState(1)
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
 
@@ -35,9 +36,14 @@ export function PaginatedList<T>({ items, pageSize, renderItem, emptyState }: Pa
   const isFirstPage = safePage === 1
   const isLastPage = safePage === pageCount
 
+  const rows = columns > 1 ? Math.ceil(pageItems.length / columns) : undefined
+
   return (
     <div className="space-y-3">
-      <ul className="space-y-1">
+      <ul
+        className={columns > 1 ? 'grid grid-flow-col gap-x-6 gap-y-1' : 'space-y-1'}
+        style={rows ? { gridTemplateRows: `repeat(${rows}, minmax(0, auto))` } : undefined}
+      >
         {pageItems.map((item, index) => (
           <li key={start + index}>{renderItem(item, start + index)}</li>
         ))}

@@ -191,6 +191,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                   <PaginatedList
                     items={preview.warnings}
                     pageSize={10}
+                    columns={2}
                     renderItem={(warning) => <span className="text-warning">{warning}</span>}
                   />
                   {preview.warning_count > preview.warnings.length && (
