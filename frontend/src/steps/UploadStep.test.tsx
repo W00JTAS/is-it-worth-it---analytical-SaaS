@@ -27,14 +27,4 @@ describe('UploadStep', () => {
 
     expect(onFileSelected).toHaveBeenCalledWith(file)
   })
-
-  it('shows the chosen file name', async () => {
-    render(<UploadStep onFileSelected={vi.fn()} />)
-
-    const file = new File(['nazwa;cena\nA;10,00'], 'catalog.csv', { type: 'text/csv' })
-    const input = screen.getByLabelText(/plik CSV/i)
-    await userEvent.upload(input, file)
-
-    expect(screen.getByText('catalog.csv')).toBeInTheDocument()
-  })
 })

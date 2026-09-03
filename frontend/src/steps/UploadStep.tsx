@@ -16,13 +16,12 @@ export function UploadStep({ onFileSelected }: UploadStepProps) {
   }
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-4 p-8">
+    <div className="mx-auto flex max-w-2xl flex-col gap-4 p-8">
       <h1 className="text-xl font-semibold text-foreground">Wgraj katalog</h1>
       <div className="flex flex-col gap-2">
         <Label htmlFor="csv-upload">Plik CSV od hurtowni</Label>
         <Input id="csv-upload" type="file" accept=".csv" onChange={handleChange} />
       </div>
-      {file && <p className="text-sm text-muted-foreground">{file.name}</p>}
       <Button type="button" disabled={!file} onClick={() => file && onFileSelected(file)}>
         Dalej
       </Button>
