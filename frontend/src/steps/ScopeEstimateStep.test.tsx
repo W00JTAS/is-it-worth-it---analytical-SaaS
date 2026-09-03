@@ -133,6 +133,7 @@ describe('ScopeEstimateStep', () => {
         }),
     )
     render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
+    await userEvent.click(screen.getByRole('button', { name: /ustawienia zaawansowane/i }))
 
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
     await waitFor(() => expect(createScanSpy).toHaveBeenCalledTimes(1))
@@ -152,6 +153,19 @@ describe('ScopeEstimateStep', () => {
 
     expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
     expect(screen.getByLabelText('Pełny skan')).not.toBeDisabled()
+  })
+
+  it('keeps advanced settings collapsed by default, with plain-language help text once opened', async () => {
+    render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
+
+    expect(screen.queryByLabelText(/limit współbieżności/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/próg nieświeżości/i)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /ustawienia zaawansowane/i }))
+
+    expect(screen.getByLabelText(/limit współbieżności/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/limit współbieżności/i)).toHaveValue(5)
+    expect(screen.getByLabelText(/próg nieświeżości/i)).toHaveValue(14)
   })
 
   // Note on the request-id guard (defense in depth in handleEstimate, see

@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label'
 import { PaginatedList } from '@/components/PaginatedList'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { ChevronDown } from 'lucide-react'
 
 interface ScopeEstimateStepProps {
   file: File
@@ -125,7 +127,7 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
   }
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-4 p-8">
+    <div className="mx-auto flex max-w-2xl flex-col gap-4 p-8">
       <h1 className="text-xl font-semibold text-foreground">Zakres skanu</h1>
 
       <fieldset className="flex flex-col gap-3 text-sm text-muted-foreground">
@@ -172,31 +174,49 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
         />
       </div>
 
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="max-concurrency">Limit współbieżności</Label>
-        <Input
-          id="max-concurrency"
-          type="number"
-          min={1}
-          value={maxConcurrency}
-          onChange={(e) => handleMaxConcurrencyChange(Number(e.target.value))}
-          disabled={fieldsDisabled}
-          className="w-24"
-        />
-      </div>
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button type="button" variant="ghost" className="group flex items-center gap-2 self-start px-0 text-sm text-muted-foreground">
+            <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+            Ustawienia zaawansowane
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="flex flex-col gap-4 pt-2">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="max-concurrency">Limit współbieżności</Label>
+            <p className="text-xs text-muted-foreground">
+              Ile ofert sprawdzamy jednocześnie. Wyższa wartość = szybciej, ale większe ryzyko
+              trafienia w limity dostawcy danych.
+            </p>
+            <Input
+              id="max-concurrency"
+              type="number"
+              min={1}
+              value={maxConcurrency}
+              onChange={(e) => handleMaxConcurrencyChange(Number(e.target.value))}
+              disabled={fieldsDisabled}
+              className="w-24"
+            />
+          </div>
 
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="staleness-threshold">Próg nieświeżości (dni)</Label>
-        <Input
-          id="staleness-threshold"
-          type="number"
-          min={0}
-          value={stalenessThresholdDays}
-          onChange={(e) => handleStalenessThresholdChange(Number(e.target.value))}
-          disabled={fieldsDisabled}
-          className="w-24"
-        />
-      </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="staleness-threshold">Próg nieświeżości (dni)</Label>
+            <p className="text-xs text-muted-foreground">
+              Po ilu dniach cena z poprzedniego skanu jest uznawana za nieaktualną i sprawdzana
+              ponownie zamiast użyta z pamięci.
+            </p>
+            <Input
+              id="staleness-threshold"
+              type="number"
+              min={0}
+              value={stalenessThresholdDays}
+              onChange={(e) => handleStalenessThresholdChange(Number(e.target.value))}
+              disabled={fieldsDisabled}
+              className="w-24"
+            />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -207,7 +227,7 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
       )}
 
       {result && (
-        <div className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm text-foreground">
+        <div className="flex flex-col gap-3 rounded-md border border-border p-6 text-sm text-foreground">
           <p>
             Bez odświeżania:{' '}
             <span className="font-semibold">
