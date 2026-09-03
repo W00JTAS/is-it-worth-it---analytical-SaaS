@@ -55,7 +55,7 @@ describe('App (ScanWizard)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
 
     await screen.findByRole('heading', { name: 'Mapowanie kolumn' })
-    await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Dalej' }))
 
     await screen.findByRole('heading', { name: 'Zakres skanu' })
     await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
