@@ -209,6 +209,35 @@ def classify(entry: dict, offer) -> tuple[str, dict]:
     return status, record
 
 
+def _is_resolved(record: dict) -> bool:
+    """Whether a checkpointed entry should be treated as permanently done on
+    resume, vs. retried by the next invocation.
+
+    Per the plan (Task 2: "wpis już rozstrzygnięty jest pomijany, wpis
+    `provider_unavailable` ponawiany") and the in-repo precedent
+    (provider_eval.py's --only-unresolved, which only counts outcome=="found"
+    as resolved), a checkpoint status is permanently resolved only when it is
+    deterministic given the same search_raw_text. `"error"` is NOT such a
+    status: it is whatever `run_replay`'s broad `except Exception` caught —
+    a transient failure (network blip, malformed response, anything other
+    than ProviderRateLimited, which already retries internally via
+    `_replay_with_retry` until success or budget exhaustion and so never
+    reaches this status at all). Treating "error" as resolved would silently
+    and permanently drop those SKUs from every future run on a one-off
+    hiccup (this project has hit exactly that class of transient failure
+    before — see .claude/rules/groq-compound-free-tier-reliability.md's
+    "seed=7" hold-out section).
+
+    `"parse_failed"` stays resolved: the same search_raw_text fails the same
+    round-trip check every time (parse_and_validate is pure), so retrying it
+    wastes a call for zero chance of a different outcome. Every other status
+    (`match`, `PRICE_CHANGED`, `regression_now_not_found`,
+    `replayed_no_baseline`) is likewise a deterministic function of the
+    stored search_raw_text and stays resolved.
+    """
+    return record.get("status") != "error"
+
+
 def _budget_exhausted(start_time: float, budget_hours: float) -> bool:
     return (time.monotonic() - start_time) >= budget_hours * 3600
 
@@ -306,7 +335,9 @@ def run_replay(
 
     for entry in source_results:
         sku = entry.get("sku")
-        if not sku or sku in checked:
+        if not sku:
+            continue
+        if sku in checked and _is_resolved(checked[sku]):
             continue
         if sku_filter is not None and sku not in sku_filter:
             continue
@@ -412,7 +443,9 @@ def main(argv: list[str] | None = None) -> None:
         if e.get("sku") and e.get("search_raw_text") is not None
         and (sku_filter is None or e["sku"] in sku_filter)
     ]
-    already_resolved = sum(1 for e in eligible if e["sku"] in checked)
+    already_resolved = sum(
+        1 for e in eligible if e["sku"] in checked and _is_resolved(checked[e["sku"]])
+    )
     to_process = len(eligible) - already_resolved
     print(f"{len(eligible)} eligible entries, {already_resolved} already resolved, "
           f"{to_process} to process this invocation" + (

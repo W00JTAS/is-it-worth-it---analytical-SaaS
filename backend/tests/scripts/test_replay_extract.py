@@ -380,6 +380,55 @@ def test_resumed_run_skips_already_checked_sku_and_processes_the_rest(tmp_path):
     assert checked["SKU-2"]["new_price"] == "3.0"
 
 
+def test_resumed_run_retries_a_prior_error_status_instead_of_skipping_it(tmp_path):
+    # A prior invocation's `except Exception` catch (run_replay's broad
+    # handler) is a transient failure, not a deterministic function of
+    # search_raw_text like match/PRICE_CHANGED/etc — see _is_resolved's
+    # docstring. Treating it as permanently resolved would silently and
+    # permanently drop the SKU from every future invocation on a one-off
+    # blip (this project's seed=7 hold-out DNS-outage incident is exactly
+    # that failure mode). Caught in the final whole-branch review.
+    raw_text = _raw_text_for(SIMPLE_RESULTS)
+    entry = _source_entry("SKU-1", raw_text, outcome="not_found")
+    checked = {"SKU-1": {"status": "error", "error": "RuntimeError: transient blip"}}
+
+    client = _QueueClient(_found_payload(price="3.00"))
+    provider = FirecrawlProvider(api_key="unused", groq_api_key="g", client=client)
+
+    status_counts = replay_extract.run_replay(
+        provider, [entry], checked,
+        market="PL", max_delivery_days=5, wait_cap_seconds=30, budget_hours=1.0,
+        sku_filter=None, limit=None,
+        out_path=tmp_path / "out.json", source_path=Path("source.json"),
+    )
+
+    assert len(client.calls) == 1  # retried, not skipped
+    assert status_counts == {"replayed_no_baseline": 1}
+    assert checked["SKU-1"]["status"] == "replayed_no_baseline"  # overwritten, not left as "error"
+
+
+@pytest.mark.parametrize("resolved_status", ["match", "PRICE_CHANGED", "regression_now_not_found",
+                                              "replayed_no_baseline", "parse_failed"])
+def test_resumed_run_skips_every_deterministic_status_not_just_match(resolved_status, tmp_path):
+    raw_text = _raw_text_for(SIMPLE_RESULTS)
+    entry = _source_entry("SKU-1", raw_text, outcome="not_found")
+    checked = {"SKU-1": {"status": resolved_status}}
+
+    client = _QueueClient(_found_payload(price="3.00"))
+    provider = FirecrawlProvider(api_key="unused", groq_api_key="g", client=client)
+
+    status_counts = replay_extract.run_replay(
+        provider, [entry], checked,
+        market="PL", max_delivery_days=5, wait_cap_seconds=30, budget_hours=1.0,
+        sku_filter=None, limit=None,
+        out_path=tmp_path / "out.json", source_path=Path("source.json"),
+    )
+
+    assert len(client.calls) == 0  # skipped, not retried
+    assert status_counts == {}
+    assert checked["SKU-1"]["status"] == resolved_status  # untouched
+
+
 def test_main_resumes_from_an_existing_out_file(monkeypatch, tmp_path):
     raw_text_1 = _raw_text_for(SIMPLE_RESULTS)
     raw_text_2 = _raw_text_for([
