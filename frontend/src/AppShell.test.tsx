@@ -153,16 +153,19 @@ describe('AppShell', () => {
       </AppShell>
     )
 
-    // A custom matcher, not `getByText('IS').closest('span')`: "IS" is itself
-    // wrapped in its own leaf <span>, so `.closest('span')` on that match
-    // returns itself (textContent "IS"), not the outer wrapper. This matcher
-    // instead finds the one <span> whose OWN full textContent is the
-    // complete title — uniquely the outermost wrapper, since no other <span>
-    // in the tree (including the ancestor SidebarHeader, which is a <div>)
-    // has that exact combined text.
-    const header = screen.getByText(
-      (content, element) => element?.tagName.toLowerCase() === 'span' && content === 'IS IT WORTH IT?'
-    )
-    expect(header).toBeInTheDocument()
+    // RTL's default getByText matching (`getNodeText`) only reads an
+    // element's DIRECT text-node children, not full recursive textContent —
+    // confirmed live in this worktree by dumping matcher calls, see the SDD
+    // ledger. So neither `getByText('IS').closest('span')` (returns the leaf
+    // "IS" span itself) nor a custom matcher keyed on `content === '...'`
+    // (the outer wrapper's direct-children content is `""`, since its
+    // children are all <span> elements, not text nodes) can find the outer
+    // wrapper via getByText. Instead: find the uniquely-matching leaf "IS"
+    // text node, walk up exactly one level to its actual parent, then check
+    // that parent's real DOM `.textContent` (not RTL's getNodeText).
+    const inner = screen.getByText('IS')
+    const header = inner.parentElement
+    expect(header?.tagName.toLowerCase()).toBe('span')
+    expect(header!.textContent).toBe('IS IT WORTH IT?')
   })
 })
