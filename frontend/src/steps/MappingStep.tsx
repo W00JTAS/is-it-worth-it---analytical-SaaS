@@ -99,110 +99,121 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
   )
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-12 p-8">
+    <div className="mx-auto flex max-w-6xl flex-col gap-6 p-8">
       <h1 className="text-xl font-semibold text-foreground">Mapowanie kolumn</h1>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {preview && (
-        <>
-          <section className="flex flex-col gap-4">
-            <div className="divide-y divide-border rounded-lg border border-border bg-card">
-              <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-                Nazwa
-                <select
-                  value={mapping.name ?? ''}
-                  onChange={(e) => handleFieldChange('name', e.target.value)}
-                  disabled={isLoading}
-                  className={cn(SELECT_CLASS, 'w-56')}
-                >
-                  <option value="">— wybierz —</option>
-                  {preview.headers.map((h) => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-                Cena hurtowa
-                <select
-                  value={mapping.wholesale_price ?? ''}
-                  onChange={(e) => handleFieldChange('wholesale_price', e.target.value)}
-                  disabled={isLoading}
-                  className={cn(SELECT_CLASS, 'w-56')}
-                >
-                  <option value="">— wybierz —</option>
-                  {preview.headers.map((h) => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-                EAN
-                <select
-                  value={mapping.ean ?? ''}
-                  onChange={(e) => handleFieldChange('ean', e.target.value)}
-                  disabled={isLoading}
-                  className={cn(SELECT_CLASS, 'w-56')}
-                >
-                  <option value="">— wybierz —</option>
-                  {preview.headers.map((h) => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-                Kategoria
-                <select
-                  value={mapping.category ?? ''}
-                  onChange={(e) => handleFieldChange('category', e.target.value)}
-                  disabled={isLoading}
-                  className={cn(SELECT_CLASS, 'w-56')}
-                >
-                  <option value="">— wybierz —</option>
-                  {preview.headers.map((h) => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-                SKU (opcjonalne)
-                <select
-                  value={mapping.sku ?? ''}
-                  onChange={(e) => handleFieldChange('sku', e.target.value)}
-                  disabled={isLoading}
-                  className={cn(SELECT_CLASS, 'w-56')}
-                >
-                  <option value="">— brak —</option>
-                  {preview.headers.map((h) => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </section>
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[24rem_1fr]">
+          <div className="flex flex-col gap-6">
+            <section className="flex flex-col gap-4">
+              <div className="divide-y divide-border rounded-lg border border-border bg-card">
+                <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
+                  Nazwa
+                  <select
+                    value={mapping.name ?? ''}
+                    onChange={(e) => handleFieldChange('name', e.target.value)}
+                    disabled={isLoading}
+                    className={cn(SELECT_CLASS, 'w-56')}
+                  >
+                    <option value="">— wybierz —</option>
+                    {preview.headers.map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
+                  Cena hurtowa
+                  <select
+                    value={mapping.wholesale_price ?? ''}
+                    onChange={(e) => handleFieldChange('wholesale_price', e.target.value)}
+                    disabled={isLoading}
+                    className={cn(SELECT_CLASS, 'w-56')}
+                  >
+                    <option value="">— wybierz —</option>
+                    {preview.headers.map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
+                  EAN
+                  <select
+                    value={mapping.ean ?? ''}
+                    onChange={(e) => handleFieldChange('ean', e.target.value)}
+                    disabled={isLoading}
+                    className={cn(SELECT_CLASS, 'w-56')}
+                  >
+                    <option value="">— wybierz —</option>
+                    {preview.headers.map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
+                  Kategoria
+                  <select
+                    value={mapping.category ?? ''}
+                    onChange={(e) => handleFieldChange('category', e.target.value)}
+                    disabled={isLoading}
+                    className={cn(SELECT_CLASS, 'w-56')}
+                  >
+                    <option value="">— wybierz —</option>
+                    {preview.headers.map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
+                  SKU (opcjonalne)
+                  <select
+                    value={mapping.sku ?? ''}
+                    onChange={(e) => handleFieldChange('sku', e.target.value)}
+                    disabled={isLoading}
+                    className={cn(SELECT_CLASS, 'w-56')}
+                  >
+                    <option value="">— brak —</option>
+                    {preview.headers.map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </section>
 
-          <section className="flex flex-col gap-2 text-sm text-muted-foreground">
-            <p>
-              {preview.parsed_count} / {preview.total_rows} wierszy sparsowanych poprawnie
-            </p>
-            {preview.warnings.length > 0 && (
-              <>
-                <PaginatedList
-                  items={preview.warnings}
-                  pageSize={10}
-                  renderItem={(warning) => <span className="text-warning">{warning}</span>}
-                />
-                {preview.warning_count > preview.warnings.length && (
-                  <p className="text-sm text-warning">
-                    ...i {preview.warning_count - preview.warnings.length} więcej
-                  </p>
-                )}
-              </>
-            )}
-          </section>
+            <section className="flex flex-col gap-2 text-sm text-muted-foreground">
+              <p>
+                {preview.parsed_count} / {preview.total_rows} wierszy sparsowanych poprawnie
+              </p>
+              {preview.warnings.length > 0 && (
+                <>
+                  <PaginatedList
+                    items={preview.warnings}
+                    pageSize={10}
+                    renderItem={(warning) => <span className="text-warning">{warning}</span>}
+                  />
+                  {preview.warning_count > preview.warnings.length && (
+                    <p className="text-sm text-warning">
+                      ...i {preview.warning_count - preview.warnings.length} więcej
+                    </p>
+                  )}
+                </>
+              )}
+            </section>
+
+            <Button
+              type="button"
+              onClick={() => onConfirmed(mapping)}
+              disabled={!requiredFilled || isLoading}
+              className="self-start"
+            >
+              Dalej
+            </Button>
+          </div>
 
           {preview.sample_rows.length > 0 && (
-            <section className="flex flex-col gap-2">
+            <section className="flex min-w-0 flex-col gap-2">
               <h2 className="text-sm font-medium text-muted-foreground">Przykładowe wiersze</h2>
               <Table>
                 <TableHeader>
@@ -224,16 +235,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
               </Table>
             </section>
           )}
-
-          <Button
-            type="button"
-            onClick={() => onConfirmed(mapping)}
-            disabled={!requiredFilled || isLoading}
-            className="self-start"
-          >
-            Dalej
-          </Button>
-        </>
+        </div>
       )}
     </div>
   )
