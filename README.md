@@ -42,9 +42,12 @@ CatalogSource → Normalize → Scope+Estimate → Price Discovery → Margin En
 - **Frontend** (`frontend/`) — React 19 + TypeScript + Vite + Tailwind. A thin client over the
   backend API — no domain logic, no router, no data-fetching library.
 - **Price discovery** — pluggable AI provider (`PROVIDER` env var): Perplexity Sonar
-  (default, paid) or Groq's free tier (`compound-mini` + `gpt-oss-20b`, two-call
-  search-then-extract). A SQLite cache keyed on `(ean, market, provider, max_delivery_days)`
-  means you never pay twice for the same lookup, shared across whichever provider is active.
+  (default, paid), Groq's free tier alone (`compound-mini` + `gpt-oss-20b`, two-call
+  search-then-extract), or `groq+firecrawl` (Groq primary, falls back to Firecrawl once Groq's
+  free tier rate-limits — see `.claude/rules/groq-compound-free-tier-reliability.md` for measured
+  found-rates; free tier is demo-scale only, not sized for a full catalog scan). A SQLite cache
+  keyed on `(ean, market, provider, max_delivery_days)` means you never pay twice for the same
+  lookup, shared across whichever provider is active.
 - **Money** — always `Decimal`, never `float`, end to end.
 
 ## Setup
@@ -70,13 +73,16 @@ Create a `.env.local` file in the **repo root** (not `backend/`) with your Perpl
 ```
 # Required: choose one
 PERPLEXITY_API_KEY=your-perplexity-key-here  # (default provider)
-# GROQ_API_KEY=your-groq-key-here             # (optional, set PROVIDER=groq to use)
-# FIRECRAWL_API_KEY=your-firecrawl-key-here   # (optional, only for scripts/provider_eval.py
-#                                             #  --provider groq+firecrawl; also needs GROQ_API_KEY)
+# GROQ_API_KEY=your-groq-key-here             # (optional, set PROVIDER=groq or
+#                                             #  PROVIDER=groq+firecrawl to use)
+# FIRECRAWL_API_KEY=your-firecrawl-key-here   # (optional, set PROVIDER=groq+firecrawl to use;
+#                                             #  also needs GROQ_API_KEY)
 
 # Optional: select which AI provider to use
-# PROVIDER=perplexity  # default
-# PROVIDER=groq        # requires GROQ_API_KEY
+# PROVIDER=perplexity      # default
+# PROVIDER=groq            # requires GROQ_API_KEY
+# PROVIDER=groq+firecrawl  # requires GROQ_API_KEY and FIRECRAWL_API_KEY; free-tier demo mode,
+#                          # not sized for a full catalog scan (see the rule file above)
 ```
 
 Run the API:

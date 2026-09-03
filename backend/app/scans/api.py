@@ -82,6 +82,24 @@ def get_provider() -> PriceProvider:
         if provider_name == "groq":
             from app.providers.groq import GroqProvider
             _shared_provider = GroqProvider(api_key=os.environ["GROQ_API_KEY"])
+        elif provider_name == "groq+firecrawl":
+            # Same composition as scripts/provider_eval.py's build_provider:
+            # GroqProvider primary (free, quota-constrained), FirecrawlProvider
+            # secondary (paid, quota-independent), FallbackProvider's latch
+            # switches to secondary after primary's first ProviderRateLimited.
+            # This is the only combination with a measured found-rate in
+            # .claude/rules/groq-compound-free-tier-reliability.md (32-84%
+            # across several prompt-tuning rounds) -- plain "groq" alone was
+            # measured at 8-25% before FallbackProvider existed.
+            from app.providers.fallback import FallbackProvider
+            from app.providers.firecrawl import FirecrawlProvider
+            from app.providers.groq import GroqProvider
+            primary = GroqProvider(api_key=os.environ["GROQ_API_KEY"])
+            secondary = FirecrawlProvider(
+                api_key=os.environ["FIRECRAWL_API_KEY"],
+                groq_api_key=os.environ["GROQ_API_KEY"],
+            )
+            _shared_provider = FallbackProvider(primary, secondary)
         else:
             _shared_provider = PerplexityProvider(api_key=os.environ["PERPLEXITY_API_KEY"])
     return _shared_provider
