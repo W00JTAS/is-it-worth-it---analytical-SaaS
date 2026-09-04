@@ -6,6 +6,28 @@ from typing import Any
 
 from app.providers.base import OfferResult
 
+# A grounded search occasionally has the model write a currency symbol
+# instead of an ISO 4217 code (e.g. "zł" for PLN) — evidenced in
+# .claude/rules/groq-firecrawl-offer-validity-audit.md, where it caused
+# real offers to be wrongly excluded downstream by evaluate.py's strict
+# `currency != product.currency` comparison. Normalize before that
+# comparison ever sees the value.
+CURRENCY_SYMBOL_ALIASES: dict[str, str] = {
+    "zł": "PLN",
+    "zl": "PLN",
+    "€": "EUR",
+    "$": "USD",
+    "£": "GBP",
+}
+
+
+def normalize_currency(raw: str) -> str:
+    stripped = raw.strip()
+    if len(stripped) == 3 and stripped.isalpha():
+        return stripped.upper()
+    return CURRENCY_SYMBOL_ALIASES.get(stripped, stripped)
+
+
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -47,6 +69,7 @@ def validate_offer_fields(
     currency = parsed.get("currency", "PLN")
     if not isinstance(currency, str) or not currency:
         return None
+    currency = normalize_currency(currency)
 
     delivery_days = parsed.get("delivery_days")
     if (

@@ -54,3 +54,40 @@ def test_returns_none_when_confidence_out_of_range():
     assert validate_offer_fields(
         parsed, raw_response="{}", citations=(), max_delivery_days=5
     ) is None
+
+
+def test_normalizes_zloty_symbol_to_iso_code():
+    parsed = {
+        "found": True, "price": 108.34, "currency": "zł", "seller": "X",
+        "source_url": "https://example.com/x", "delivery_days": 2, "confidence": 0.9,
+    }
+    offer = validate_offer_fields(
+        parsed, raw_response="{}", citations=(), max_delivery_days=5
+    )
+    assert offer is not None
+    assert offer.currency == "PLN"
+
+
+def test_normalizes_lowercase_iso_code_to_uppercase():
+    parsed = {
+        "found": True, "price": 10.0, "currency": "pln", "seller": "X",
+        "source_url": "https://example.com/x", "delivery_days": 2, "confidence": 0.9,
+    }
+    offer = validate_offer_fields(
+        parsed, raw_response="{}", citations=(), max_delivery_days=5
+    )
+    assert offer is not None
+    assert offer.currency == "PLN"
+
+
+def test_normalizes_euro_and_dollar_symbols():
+    for symbol, iso in (("€", "EUR"), ("$", "USD"), ("£", "GBP")):
+        parsed = {
+            "found": True, "price": 10.0, "currency": symbol, "seller": "X",
+            "source_url": "https://example.com/x", "delivery_days": 2, "confidence": 0.9,
+        }
+        offer = validate_offer_fields(
+            parsed, raw_response="{}", citations=(), max_delivery_days=5
+        )
+        assert offer is not None
+        assert offer.currency == iso
