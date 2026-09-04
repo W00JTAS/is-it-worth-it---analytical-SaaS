@@ -313,6 +313,33 @@ def test_extract_prompt_clamps_default_delivery_days_to_max_delivery_days():
     assert "use 1 as a conservative default" in prompt
 
 
+def test_extract_prompt_rejects_dead_and_unavailable_listings():
+    # Regression for the offer-validity audit in
+    # .claude/rules/groq-firecrawl-offer-validity-audit.md: a live audit of
+    # a real scan found confidently-reported offers (confidence >= 0.80) for
+    # 404 pages, soft-404 "product not found" pages, discontinued/out-of-
+    # stock listings, and a deal-aggregator page rather than the seller's
+    # own listing. The existing "never a search-results/category/comparison
+    # page" instruction didn't stop the aggregator case in practice, so this
+    # spells out the aggregator rejection explicitly too, alongside
+    # liveness/stock status which had no prompt coverage at all before.
+    client = _TwoServiceClient(
+        search_payload=_search_response([
+            {"title": "Example Shop", "description": "Cena: 89.99 zl", "url": "https://example.com/product"},
+        ]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    prompt = client.requests[1]["json"]["messages"][0]["content"].lower()
+    assert "out of stock" in prompt
+    assert "discontinued" in prompt
+    assert "404" in prompt
+    assert "aggregator" in prompt
+
+
 def test_extract_call_includes_max_tokens_and_reasoning_effort():
     client = _TwoServiceClient(
         search_payload=_search_response([

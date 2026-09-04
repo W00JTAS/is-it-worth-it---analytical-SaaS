@@ -290,6 +290,15 @@ class FirecrawlProvider:
             "likely belongs to a different, unrelated item on that page, not this product. Only "
             "extract a price you can verify is stated specifically for this exact product on its "
             "own listing.\n\n"
+            "A result can also be a price-comparison or deal-aggregator page (e.g. it lists "
+            "\"now €X at [some other store]\" rather than being that store's own listing), or a "
+            "page that is no longer available — a 404 / \"page not found\" result, or a page "
+            "whose own content says the product wasn't found — or a listing explicitly marked "
+            "out of stock, backordered, discontinued, or withdrawn from sale (e.g. \"wycofane z "
+            "oferty\", \"niedostępny\", \"out of stock\"). None of these count as a genuine, "
+            'currently-buyable offer — do not extract a price from one, even if a price is '
+            "shown; prefer a different result that is the actual seller's own, live, in-stock "
+            'listing, or set "found" to false if none of the results qualifies.\n\n'
             "A single result's description can also contain more than one price even on a "
             "genuine, correctly-matched product page — for example a much smaller price for an "
             "accessory or a 'buy this too for only X' upsell, or because the description text "

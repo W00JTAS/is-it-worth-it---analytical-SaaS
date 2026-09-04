@@ -226,6 +226,14 @@ class GroqProvider:
     def _build_extract_prompt(self, search_text: str, max_delivery_days: int) -> str:
         return (
             "Extract the cheapest offer described below into the requested JSON schema. "
+            "The text may describe a page that is no longer available (a 404 / \"page not "
+            "found\" result, or a page whose own content says the product wasn't found), a "
+            "listing explicitly marked out of stock, backordered, discontinued, or withdrawn "
+            "from sale (e.g. \"wycofane z oferty\", \"niedostępny\", \"out of stock\"), or a "
+            "price-comparison or deal-aggregator page reporting another site's price rather "
+            "than the seller's own listing. None of these count as a genuine, currently-"
+            'buyable offer — set "found" to false rather than extracting a price from one, '
+            "even if a price is shown.\n\n"
             f'Set "found" to false if the text does not describe a genuine current offer, or if '
             f"the only offer described has delivery_days greater than {max_delivery_days}.\n\n"
             f"Text:\n{search_text}"

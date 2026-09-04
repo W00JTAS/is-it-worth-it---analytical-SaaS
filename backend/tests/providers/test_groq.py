@@ -257,6 +257,29 @@ def test_extract_model_constructor_override_is_used_in_extract_call():
     assert client.requests[1]["json"]["model"] == "custom-model"
 
 
+def test_extract_prompt_rejects_dead_and_unavailable_listings():
+    # Regression for the offer-validity audit in
+    # .claude/rules/groq-firecrawl-offer-validity-audit.md: a real scan's
+    # extraction confidently reported offers for 404 pages, soft-404 "product
+    # not found" pages, and discontinued/out-of-stock listings, all with
+    # confidence >= 0.80. GroqProvider is FallbackProvider's primary, so if
+    # its own extraction confidently returns such a bad offer, secondary
+    # (Firecrawl) is never even consulted.
+    client = _TwoCallClient(
+        search_payload=_search_response("no offer found"),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = GroqProvider(api_key="test-key", client=client)
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    prompt = client.requests[1]["json"]["messages"][0]["content"].lower()
+    assert "out of stock" in prompt
+    assert "discontinued" in prompt
+    assert "404" in prompt
+    assert "aggregator" in prompt
+
+
 def test_returns_none_citations_when_search_results_results_field_is_none():
     # SDK types search_results.results as Optional — must not crash when it's
     # None (e.g. the tool ran but found nothing) rather than an empty list.
