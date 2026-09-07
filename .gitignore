@@ -3,4 +3,15 @@
 .superpowers/
 .env
 .env.local
-/supplier_z_cenami_i_ean.csv
+# Real supplier catalogs — never commit one
+/*_z_cenami_i_ean.csv
+/catalog*.csv
+
+# Local agent tooling — not part of the project
+/.agents/
+/skills-lock.json
+/.claude/agent-memory/
+/.claude/hooks/
+
+# Raw benchmark dumps — scraped third-party page content, not project code
+/backend/scripts/eval_results/

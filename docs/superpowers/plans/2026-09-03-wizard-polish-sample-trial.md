@@ -832,7 +832,7 @@ git commit -m "feat(scope): hide concurrency/staleness behind advanced settings,
 - Create: `frontend/public/samples/elektronika.csv`
 
 **Interfaces:**
-- Consumes: `supplier_z_cenami_i_ean.csv` at the repo root (read-only).
+- Consumes: a real supplier catalog CSV at the repo root (gitignored, read-only).
 - Produces: 3 static CSV files, each with header `SKU;ean;nazwa;kategoria;cena` and exactly 25 data
   rows, semicolon-delimited, quoted fields — the exact shape `Task 9`'s hardcoded `ColumnMapping`
   and `Task 10`'s file-construction code depend on.
@@ -863,7 +863,7 @@ def matches(cat, prefix_or_tuple):
     return cat.startswith(prefix_or_tuple)
 
 buckets = {'kuchnia': [], 'zabawki': [], 'elektronika': []}
-with open('supplier_z_cenami_i_ean.csv', newline='', encoding='utf-8') as f:
+with open('catalog.csv', newline='', encoding='utf-8') as f:
     r = csv.DictReader(f, delimiter=';')
     for row in r:
         cat = row['kategoria']

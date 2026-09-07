@@ -8,23 +8,23 @@ describe('UploadStep', () => {
   it('disables the next button until a file is chosen', async () => {
     render(<UploadStep onFileSelected={vi.fn()} onSampleSelected={vi.fn()} />)
 
-    expect(screen.getByRole('button', { name: 'Dalej' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
 
     const file = new File(['nazwa;cena\nA;10,00'], 'catalog.csv', { type: 'text/csv' })
-    const input = screen.getByLabelText(/plik CSV/i)
+    const input = screen.getByLabelText(/wholesaler CSV/i)
     await userEvent.upload(input, file)
 
-    expect(screen.getByRole('button', { name: 'Dalej' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   })
 
-  it('calls onFileSelected with the chosen file when Dalej is clicked', async () => {
+  it('calls onFileSelected with the chosen file when Continue is clicked', async () => {
     const onFileSelected = vi.fn()
     render(<UploadStep onFileSelected={onFileSelected} onSampleSelected={vi.fn()} />)
 
     const file = new File(['nazwa;cena\nA;10,00'], 'catalog.csv', { type: 'text/csv' })
-    const input = screen.getByLabelText(/plik CSV/i)
+    const input = screen.getByLabelText(/wholesaler CSV/i)
     await userEvent.upload(input, file)
-    await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(onFileSelected).toHaveBeenCalledWith(file)
   })
@@ -46,7 +46,7 @@ describe('UploadStep sample-trial cards', () => {
     const onSampleSelected = vi.fn()
     render(<UploadStep onFileSelected={vi.fn()} onSampleSelected={onSampleSelected} />)
 
-    await userEvent.click(screen.getByRole('button', { name: /kuchnia/i }))
+    await userEvent.click(screen.getByRole('button', { name: /kitchen/i }))
 
     await waitFor(() => expect(onSampleSelected).toHaveBeenCalledTimes(1))
     expect(globalThis.fetch).toHaveBeenCalledWith('/samples/kuchnia.csv')
@@ -61,9 +61,9 @@ describe('UploadStep sample-trial cards', () => {
   it('renders all three category cards', () => {
     render(<UploadStep onFileSelected={vi.fn()} onSampleSelected={vi.fn()} />)
 
-    expect(screen.getByRole('button', { name: /kuchnia/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /zabawki/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /elektronika/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /kitchen/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /toys/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /electronics/i })).toBeInTheDocument()
   })
 
   // --- Final whole-branch review, Fix 1: unmount guard --------------------
@@ -76,7 +76,7 @@ describe('UploadStep sample-trial cards', () => {
     const onSampleSelected = vi.fn()
     const { unmount } = render(<UploadStep onFileSelected={vi.fn()} onSampleSelected={onSampleSelected} />)
 
-    await userEvent.click(screen.getByRole('button', { name: /kuchnia/i }))
+    await userEvent.click(screen.getByRole('button', { name: /kitchen/i }))
 
     unmount()
 
@@ -103,7 +103,7 @@ describe('UploadStep sample-trial cards', () => {
       </StrictMode>,
     )
 
-    await userEvent.click(screen.getByRole('button', { name: /kuchnia/i }))
+    await userEvent.click(screen.getByRole('button', { name: /kitchen/i }))
 
     // Without resetting isMountedRef.current at the top of the effect,
     // StrictMode's simulated mount->cleanup->mount leaves the guard
@@ -111,6 +111,6 @@ describe('UploadStep sample-trial cards', () => {
     // onSampleSelected would never fire and the button would stay on
     // "Wczytywanie…" forever.
     await waitFor(() => expect(onSampleSelected).toHaveBeenCalledTimes(1))
-    expect(screen.getByRole('button', { name: /kuchnia/i })).not.toHaveTextContent('Wczytywanie')
+    expect(screen.getByRole('button', { name: /kitchen/i })).not.toHaveTextContent('Wczytywanie')
   })
 })

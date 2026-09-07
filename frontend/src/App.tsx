@@ -16,7 +16,7 @@ function StepFallback() {
   return (
     <div className="p-8">
       <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
-        Ładowanie…
+        Loading…
       </p>
     </div>
   )

@@ -11,12 +11,12 @@ describe('AppShell', () => {
       </AppShell>
     )
 
-    const labels = ['Upload', 'Mapowanie', 'Zakres', 'Postęp', 'Raport']
+    const labels = ['Upload', 'Mapping', 'Scope', 'Progress', 'Report']
     for (const label of labels) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
 
-    expect(screen.getByRole('button', { name: 'Mapowanie' })).toHaveAttribute('data-active', 'true')
+    expect(screen.getByRole('button', { name: 'Mapping' })).toHaveAttribute('data-active', 'true')
     expect(screen.getByRole('button', { name: 'Upload' })).not.toHaveAttribute('data-active')
   })
 
@@ -27,11 +27,11 @@ describe('AppShell', () => {
       </AppShell>
     )
 
-    expect(screen.getByRole('button', { name: 'Zakres' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Postęp' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Raport' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Scope' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Progress' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Report' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Upload' })).not.toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Mapowanie' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Mapping' })).not.toBeDisabled()
   })
 
   it('renders children inside the content area', () => {
@@ -52,7 +52,7 @@ describe('AppShell', () => {
       </AppShell>
     )
 
-    const toggle = screen.getByRole('button', { name: /motyw/i })
+    const toggle = screen.getByRole('button', { name: /theme/i })
     expect(document.documentElement.classList.contains('dark')).toBe(false)
 
     await user.click(toggle)

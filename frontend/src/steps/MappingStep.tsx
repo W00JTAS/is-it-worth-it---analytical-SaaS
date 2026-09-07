@@ -64,7 +64,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
       }
     } catch (err) {
       if (previewRequestIdRef.current === requestId) {
-        setError(err instanceof ApiError ? err.message : 'Nie udało się wczytać podglądu pliku')
+        setError(err instanceof ApiError ? err.message : 'Could not load the file preview')
       }
     } finally {
       if (previewRequestIdRef.current === requestId) {
@@ -100,7 +100,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
 
   return (
     <div className="mx-auto flex max-w-[2200px] flex-col gap-6 p-8">
-      <h1 className="text-xl font-semibold text-foreground">Mapowanie kolumn</h1>
+      <h1 className="text-xl font-semibold text-foreground">Column mapping</h1>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -110,28 +110,28 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
             <section className="flex flex-col gap-4">
               <div className="divide-y divide-border rounded-lg border border-border bg-card">
                 <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-                  Nazwa
+                  Name
                   <select
                     value={mapping.name ?? ''}
                     onChange={(e) => handleFieldChange('name', e.target.value)}
                     disabled={isLoading}
                     className={cn(SELECT_CLASS, 'w-56')}
                   >
-                    <option value="">— wybierz —</option>
+                    <option value="">— select —</option>
                     {preview.headers.map((h) => (
                       <option key={h} value={h}>{h}</option>
                     ))}
                   </select>
                 </label>
                 <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-                  Cena hurtowa
+                  Wholesale price
                   <select
                     value={mapping.wholesale_price ?? ''}
                     onChange={(e) => handleFieldChange('wholesale_price', e.target.value)}
                     disabled={isLoading}
                     className={cn(SELECT_CLASS, 'w-56')}
                   >
-                    <option value="">— wybierz —</option>
+                    <option value="">— select —</option>
                     {preview.headers.map((h) => (
                       <option key={h} value={h}>{h}</option>
                     ))}
@@ -145,35 +145,35 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                     disabled={isLoading}
                     className={cn(SELECT_CLASS, 'w-56')}
                   >
-                    <option value="">— wybierz —</option>
+                    <option value="">— select —</option>
                     {preview.headers.map((h) => (
                       <option key={h} value={h}>{h}</option>
                     ))}
                   </select>
                 </label>
                 <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-                  Kategoria
+                  Category
                   <select
                     value={mapping.category ?? ''}
                     onChange={(e) => handleFieldChange('category', e.target.value)}
                     disabled={isLoading}
                     className={cn(SELECT_CLASS, 'w-56')}
                   >
-                    <option value="">— wybierz —</option>
+                    <option value="">— select —</option>
                     {preview.headers.map((h) => (
                       <option key={h} value={h}>{h}</option>
                     ))}
                   </select>
                 </label>
                 <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-                  SKU (opcjonalne)
+                  SKU (optional)
                   <select
                     value={mapping.sku ?? ''}
                     onChange={(e) => handleFieldChange('sku', e.target.value)}
                     disabled={isLoading}
                     className={cn(SELECT_CLASS, 'w-56')}
                   >
-                    <option value="">— brak —</option>
+                    <option value="">— none —</option>
                     {preview.headers.map((h) => (
                       <option key={h} value={h}>{h}</option>
                     ))}
@@ -184,7 +184,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
 
             <section className="flex flex-col gap-2 text-sm text-muted-foreground">
               <p>
-                {preview.parsed_count} / {preview.total_rows} wierszy sparsowanych poprawnie
+                {preview.parsed_count} / {preview.total_rows} rows parsed correctly
               </p>
               {preview.warnings.length > 0 && (
                 <>
@@ -195,7 +195,7 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
                   />
                   {preview.warning_count > preview.warnings.length && (
                     <p className="text-sm text-warning">
-                      ...i {preview.warning_count - preview.warnings.length} więcej
+                      ...i {preview.warning_count - preview.warnings.length} more
                     </p>
                   )}
                 </>
@@ -208,13 +208,13 @@ export function MappingStep({ file, onConfirmed }: MappingStepProps) {
               disabled={!requiredFilled || isLoading}
               className="self-start"
             >
-              Dalej
+              Continue
             </Button>
           </div>
 
           {preview.sample_rows.length > 0 && (
             <section className="flex min-w-0 flex-col gap-2">
-              <h2 className="text-sm font-medium text-muted-foreground">Przykładowe wiersze</h2>
+              <h2 className="text-sm font-medium text-muted-foreground">Sample rows</h2>
               <Table>
                 <TableHeader>
                   <TableRow>

@@ -49,7 +49,7 @@ export function useScanEvents(scanId: string | null): ScanEventsState {
             pollTimer = null
           }
         } catch {
-          if (!cancelled) flushSync(() => setError('Nie udało się pobrać statusu skanu'))
+          if (!cancelled) flushSync(() => setError('Could not fetch the scan status'))
         }
       }
       // Rely solely on the interval tick for the first (and every subsequent)
@@ -68,7 +68,7 @@ export function useScanEvents(scanId: string | null): ScanEventsState {
         reconnectAttempts = 0
         const data = JSON.parse(event.data)
         if (data.status === 'timeout') {
-          flushSync(() => setError(data.detail ?? 'Skan nigdy nie został uruchomiony'))
+          flushSync(() => setError(data.detail ?? 'The scan was never started'))
           eventSource?.close()
           return
         }

@@ -49,7 +49,7 @@ from app.providers.groq import GroqProvider  # noqa: E402
 SCRIPT_DIR = Path(__file__).resolve().parent
 SAMPLES_DIR = SCRIPT_DIR / "eval_samples"
 RESULTS_DIR = SCRIPT_DIR / "eval_results"
-DEFAULT_CSV = SCRIPT_DIR.parent.parent / "supplier_z_cenami_i_ean.csv"
+DEFAULT_CSV = SCRIPT_DIR.parent.parent / "catalog.csv"
 
 # A `found` offer priced below this fraction of the product's own wholesale
 # price is flagged "suspiciously_low" so the plan's manual spot-check (3

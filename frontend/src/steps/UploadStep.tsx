@@ -23,9 +23,9 @@ interface SampleCategory {
 }
 
 const SAMPLE_CATEGORIES: readonly SampleCategory[] = [
-  { id: 'kuchnia', label: 'Kuchnia i AGD', description: '25 realnych produktów AGD', icon: UtensilsCrossed },
-  { id: 'zabawki', label: 'Zabawki', description: '25 realnych zabawek', icon: ToyBrick },
-  { id: 'elektronika', label: 'Elektronika', description: '25 realnych produktów elektronicznych', icon: Cpu },
+  { id: 'kuchnia', label: 'Kitchen & appliances', description: '25 home appliances — demo catalog', icon: UtensilsCrossed },
+  { id: 'zabawki', label: 'Toys', description: '25 toys — demo catalog', icon: ToyBrick },
+  { id: 'elektronika', label: 'Electronics', description: '25 electronics products — demo catalog', icon: Cpu },
 ]
 
 export function UploadStep({ onFileSelected, onSampleSelected }: UploadStepProps) {
@@ -66,7 +66,7 @@ export function UploadStep({ onFileSelected, onSampleSelected }: UploadStepProps
       const sampleFile = new File([blob], `${category.id}.csv`, { type: 'text/csv' })
       onSampleSelected(sampleFile, SAMPLE_COLUMN_MAPPING)
     } catch {
-      if (isMountedRef.current) setSampleError('Nie udało się wczytać przykładowej próbki')
+      if (isMountedRef.current) setSampleError('Could not load the sample')
     } finally {
       if (isMountedRef.current) setLoadingSampleId(null)
     }
@@ -75,19 +75,19 @@ export function UploadStep({ onFileSelected, onSampleSelected }: UploadStepProps
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-8 p-8">
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold text-foreground">Wgraj katalog</h1>
+        <h1 className="text-xl font-semibold text-foreground">Upload a catalog</h1>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="csv-upload">Plik CSV od hurtowni</Label>
+          <Label htmlFor="csv-upload">Wholesaler CSV file</Label>
           <Input id="csv-upload" type="file" accept=".csv" onChange={handleChange} />
         </div>
         <Button type="button" disabled={!file} onClick={() => file && onFileSelected(file)}>
-          Dalej
+          Continue
         </Button>
       </div>
 
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
-          Nie masz jeszcze własnego pliku? Wypróbuj na przykładowej próbce:
+          Don't have a file of your own yet? Try one of these samples:
         </p>
         {sampleError && <p className="text-sm text-destructive">{sampleError}</p>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

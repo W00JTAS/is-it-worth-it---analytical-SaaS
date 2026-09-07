@@ -9,10 +9,10 @@ import type { CsvPreview } from '../api/types'
 const FILE = new File(['nazwa;cena'], 'catalog.csv', { type: 'text/csv' })
 
 const PREVIEW: CsvPreview = {
-  headers: ['Nazwa', 'Cena hurtowa', 'EAN', 'Kategoria', 'SKU'],
-  mapping: { name: 'Nazwa', wholesale_price: 'Cena hurtowa', ean: 'EAN', category: 'Kategoria', sku: 'SKU' },
+  headers: ['Name', 'Wholesale price', 'EAN', 'Category', 'SKU'],
+  mapping: { name: 'Name', wholesale_price: 'Wholesale price', ean: 'EAN', category: 'Category', sku: 'SKU' },
   sample_rows: [
-    { Nazwa: 'Produkt A', 'Cena hurtowa': '10,00', EAN: '5901234123457', Kategoria: 'Elektronika', SKU: 'A1' },
+    { Name: 'Produkt A', 'Wholesale price': '10,00', EAN: '5901234123457', Category: 'Electronics', SKU: 'A1' },
   ],
   total_rows: 1,
   parsed_count: 1,
@@ -32,12 +32,12 @@ describe('MappingStep', () => {
     vi.spyOn(client, 'getCsvPreview').mockResolvedValue(PREVIEW)
     render(<MappingStep file={FILE} onConfirmed={vi.fn()} />)
 
-    await screen.findByText('1 / 1 wierszy sparsowanych poprawnie')
-    expect(screen.getByLabelText('Nazwa')).toHaveValue('Nazwa')
-    expect(screen.getByLabelText('Cena hurtowa')).toHaveValue('Cena hurtowa')
+    await screen.findByText('1 / 1 rows parsed correctly')
+    expect(screen.getByLabelText('Name')).toHaveValue('Name')
+    expect(screen.getByLabelText('Wholesale price')).toHaveValue('Wholesale price')
     expect(screen.getByLabelText('EAN')).toHaveValue('EAN')
-    expect(screen.getByLabelText('Kategoria')).toHaveValue('Kategoria')
-    expect(screen.getByLabelText('SKU (opcjonalne)')).toHaveValue('SKU')
+    expect(screen.getByLabelText('Category')).toHaveValue('Category')
+    expect(screen.getByLabelText('SKU (optional)')).toHaveValue('SKU')
   })
 
   it('shows the sample rows table', async () => {
@@ -59,7 +59,7 @@ describe('MappingStep', () => {
     render(<MappingStep file={FILE} onConfirmed={vi.fn()} />)
 
     await screen.findByText('Row 2: missing name, skipped')
-    expect(screen.getByText('...i 21 więcej')).toBeInTheDocument()
+    expect(screen.getByText('...i 21 more')).toBeInTheDocument()
   })
 
   it('auto-refreshes the preview after a debounced delay when a mapping field changes', async () => {
@@ -67,37 +67,37 @@ describe('MappingStep', () => {
     const user = userEvent.setup({ delay: null })
     const spy = vi.spyOn(client, 'getCsvPreview').mockResolvedValue(PREVIEW)
     render(<MappingStep file={FILE} onConfirmed={vi.fn()} />)
-    await screen.findByText('1 / 1 wierszy sparsowanych poprawnie')
+    await screen.findByText('1 / 1 rows parsed correctly')
 
-    await user.selectOptions(screen.getByLabelText('EAN'), 'Kategoria')
+    await user.selectOptions(screen.getByLabelText('EAN'), 'Category')
     await act(() => vi.advanceTimersByTimeAsync(800))
 
     await waitFor(() =>
       expect(spy).toHaveBeenLastCalledWith(FILE, {
-        name: 'Nazwa', wholesale_price: 'Cena hurtowa', ean: 'Kategoria', category: 'Kategoria', sku: 'SKU',
+        name: 'Name', wholesale_price: 'Wholesale price', ean: 'Category', category: 'Category', sku: 'SKU',
       }),
     )
     vi.useRealTimers()
   })
 
-  it('disables Dalej until all required fields are mapped, and confirms the current mapping when clicked', async () => {
+  it('disables Continue until all required fields are mapped, and confirms the current mapping when clicked', async () => {
     vi.spyOn(client, 'getCsvPreview').mockResolvedValue({
       ...PREVIEW,
-      mapping: { name: 'Nazwa', wholesale_price: null, ean: 'EAN', category: 'Kategoria', sku: null },
+      mapping: { name: 'Name', wholesale_price: null, ean: 'EAN', category: 'Category', sku: null },
     })
     const onConfirmed = vi.fn()
     render(<MappingStep file={FILE} onConfirmed={onConfirmed} />)
     await screen.findByText('Produkt A')
 
-    expect(screen.getByRole('button', { name: 'Dalej' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
 
-    await userEvent.selectOptions(screen.getByLabelText('Cena hurtowa'), 'Cena hurtowa')
-    expect(screen.getByRole('button', { name: 'Dalej' })).toBeEnabled()
+    await userEvent.selectOptions(screen.getByLabelText('Wholesale price'), 'Wholesale price')
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(onConfirmed).toHaveBeenCalledWith({
-      name: 'Nazwa', wholesale_price: 'Cena hurtowa', ean: 'EAN', category: 'Kategoria', sku: null,
+      name: 'Name', wholesale_price: 'Wholesale price', ean: 'EAN', category: 'Category', sku: null,
     })
   })
 
@@ -111,30 +111,30 @@ describe('MappingStep', () => {
 
   // --- Fix 2 (final whole-branch review): in-flight request guard ---------
 
-  it('disables all mapping selects and Dalej while a refresh request is in flight', async () => {
+  it('disables all mapping selects and Continue while a refresh request is in flight', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const user = userEvent.setup({ delay: null })
     let resolveRefresh: (value: CsvPreview) => void = () => {}
     const spy = vi.spyOn(client, 'getCsvPreview')
     spy.mockResolvedValueOnce(PREVIEW)
     render(<MappingStep file={FILE} onConfirmed={vi.fn()} />)
-    await screen.findByText('1 / 1 wierszy sparsowanych poprawnie')
+    await screen.findByText('1 / 1 rows parsed correctly')
 
     spy.mockImplementationOnce(
       () => new Promise<CsvPreview>((resolve) => { resolveRefresh = resolve }),
     )
-    await user.selectOptions(screen.getByLabelText('EAN'), 'Kategoria')
+    await user.selectOptions(screen.getByLabelText('EAN'), 'Category')
     await act(() => vi.advanceTimersByTimeAsync(800))
 
-    expect(screen.getByLabelText('Nazwa')).toBeDisabled()
-    expect(screen.getByLabelText('Cena hurtowa')).toBeDisabled()
+    expect(screen.getByLabelText('Name')).toBeDisabled()
+    expect(screen.getByLabelText('Wholesale price')).toBeDisabled()
     expect(screen.getByLabelText('EAN')).toBeDisabled()
-    expect(screen.getByLabelText('Kategoria')).toBeDisabled()
-    expect(screen.getByLabelText('SKU (opcjonalne)')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Dalej' })).toBeDisabled()
+    expect(screen.getByLabelText('Category')).toBeDisabled()
+    expect(screen.getByLabelText('SKU (optional)')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
 
     resolveRefresh(PREVIEW)
-    await waitFor(() => expect(screen.getByLabelText('Nazwa')).toBeEnabled())
+    await waitFor(() => expect(screen.getByLabelText('Name')).toBeEnabled())
     vi.useRealTimers()
   })
 
@@ -148,7 +148,7 @@ describe('MappingStep', () => {
     const spy = vi.spyOn(client, 'getCsvPreview')
     spy.mockResolvedValueOnce(PREVIEW)
     render(<MappingStep file={FILE} onConfirmed={vi.fn()} />)
-    await screen.findByText('1 / 1 wierszy sparsowanych poprawnie')
+    await screen.findByText('1 / 1 rows parsed correctly')
 
     // Register the pending-promise mock BEFORE selectOptions -- selectOptions
     // synchronously fires handleFieldChange, which schedules the debounce
@@ -161,15 +161,15 @@ describe('MappingStep', () => {
     )
     // User clears SKU back to "-- brak --", which now triggers a debounced
     // refresh on its own (no button to click anymore).
-    await user.selectOptions(screen.getByLabelText('SKU (opcjonalne)'), '')
+    await user.selectOptions(screen.getByLabelText('SKU (optional)'), '')
     await act(() => vi.advanceTimersByTimeAsync(800))
 
     // Backend echoes the auto-detected SKU back, as `_merge_mapping`'s `or`
     // fallback would for a field sent as null.
     resolveRefresh(PREVIEW)
-    await waitFor(() => expect(screen.getByLabelText('Nazwa')).toBeEnabled())
+    await waitFor(() => expect(screen.getByLabelText('Name')).toBeEnabled())
 
-    expect(screen.getByLabelText('SKU (opcjonalne)')).toHaveValue('')
+    expect(screen.getByLabelText('SKU (optional)')).toHaveValue('')
     vi.useRealTimers()
   })
 })

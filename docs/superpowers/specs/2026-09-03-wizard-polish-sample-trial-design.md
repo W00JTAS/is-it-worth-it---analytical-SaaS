@@ -5,7 +5,7 @@ of `UploadStep` and `MappingStep`).
 
 ## Context
 
-The user ran the app on their own catalog (`supplier_z_cenami_i_ean.csv`, 115k rows) at their actual
+The user ran the app on a real supplier catalog (115k rows) at their actual
 monitor resolution (2560-wide) and reported concrete problems, with two screenshots attached:
 
 - `AppShell`'s collapsed sidebar hides the "IS IT WORTH IT" title completely instead of leaving a
@@ -47,7 +47,7 @@ existing `POST /scans` CSV pipeline unmodified.
 | Warnings list columns | `PaginatedList` gains an optional `columns?: number` prop (default `1`, fully backward compatible — `ScopeEstimateStep`'s existing call site is untouched). `MappingStep`'s call site passes `columns={2}`, rendering the 10 items/page as 2 columns of 5 via CSS grid (`grid-flow-col`, explicit row count `Math.ceil(pageSize / columns)`), not a naive left-to-right wrap. |
 | `ScopeEstimateStep` jargon | "Limit współbieżności" and "Próg nieświeżości" move behind a new `Collapsible` ("Ustawienia zaawansowane", collapsed by default) with one-sentence plain-language help text under each field. Defaults are unchanged (concurrency 5, staleness 14 days) — an ordinary user never has to open it. Adds the `collapsible` shadcn component (`npx shadcn add collapsible`) — per the repo's shadcn-preset rule, the bare-`data-*` grep check runs after, though the project's `PostToolUse` hook already covers this automatically. |
 | Sample-trial entry point | `UploadStep` gains a second section below the existing upload form: three cards (Kuchnia i AGD / Zabawki / Elektronika), each a plain bordered `bg-card` block matching the app's existing visual language — no 21st component, see above. Clicking one fetches a pre-bundled static CSV, wraps it in a `File`, and calls a new `onSampleSelected(file, mapping)` prop — skipping `MappingStep` entirely, since the mapping for these files is fixed and known in advance. |
-| Sample data source | The 3 sample CSVs are real rows filtered out of the repo's own `supplier_z_cenami_i_ean.csv` by category prefix (`AGD - Produkty` / `(Gry i zabawki)` / a fixed list of electronics category prefixes), price > 0, non-empty EAN and name, `random.Random(42).sample(..., 25)` for a reproducible pick. Same header shape as the source (`SKU;ean;nazwa;kategoria;cena`), so the deterministic `ColumnMapping` the frontend hard-codes for these files is exactly `{name: "nazwa", wholesale_price: "cena", ean: "ean", category: "kategoria", sku: "SKU"}`. Committed as static files under `frontend/public/samples/`. |
+| Sample data source | The 3 sample CSVs are demo catalogs of 25 rows each under `frontend/public/samples/`. Product identity (`ean`, `nazwa`) is public information about branded goods, so market lookups in the demo resolve against real offers; `SKU`, `kategoria` and `cena` are synthetic — no supplier's wholesale pricing, internal codes or category tree is published here. Header shape is `SKU;ean;nazwa;kategoria;cena`, so the deterministic `ColumnMapping` the frontend hard-codes for these files is exactly `{name: "nazwa", wholesale_price: "cena", ean: "ean", category: "kategoria", sku: "SKU"}`. |
 | Sample-trial scope default | The sample flow lands in `ScopeEstimateStep` with `scopeType` defaulted to **`full`**, not `sample`. Each sample CSV already contains exactly the intended 25 rows, and because rows were pooled from many different literal `kategoria` values (e.g. kitchen's 25 rows span ~20 distinct sub-categories like "Czajniki elektryczne", "Frytownice"), the app's *"Próbka per kategoria"* scope type would mostly-or-fully degenerate to the same 25 rows anyway, for the wrong reason (many 1-2-row "categories", not a deliberate per-category sample). `full` on a 25-row file is simpler, has no edge cases, and is exactly "run a real scan on 25 real products" as asked. Nothing about `ScopeEstimateStep` is locked or hidden for this entry path — the user can still change scope type if they want to. |
 | Provider used for the sample scan | Whatever `PROVIDER` the backend is already configured with (e.g. `groq+firecrawl`, per `.claude/rules/groq-compound-free-tier-reliability.md`) — the sample-trial feature does not add per-request provider selection; it exists to let someone try the *currently configured* pipeline, not to add a new provider-choice UI. |
 
@@ -126,7 +126,7 @@ def matches(cat, prefix_or_tuple):
     return cat.startswith(prefix_or_tuple)
 
 buckets = {'kuchnia': [], 'zabawki': [], 'elektronika': []}
-with open('supplier_z_cenami_i_ean.csv', newline='', encoding='utf-8') as f:
+with open('catalog.csv', newline='', encoding='utf-8') as f:
     r = csv.DictReader(f, delimiter=';')
     for row in r:
         cat = row['kategoria']

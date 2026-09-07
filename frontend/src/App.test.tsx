@@ -51,20 +51,20 @@ describe('App (ScanWizard)', () => {
     render(<App />)
 
     const file = new File(['nazwa;cena'], 'catalog.csv', { type: 'text/csv' })
-    await userEvent.upload(screen.getByLabelText(/plik CSV/i), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
+    await userEvent.upload(screen.getByLabelText(/wholesaler CSV/i), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
-    await screen.findByRole('heading', { name: 'Mapowanie kolumn' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Dalej' }))
+    await screen.findByRole('heading', { name: 'Column mapping' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }))
 
-    await screen.findByRole('heading', { name: 'Zakres skanu' })
-    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
-    await screen.findByText(/bez odświeżania/i)
-    await userEvent.click(screen.getByRole('button', { name: 'Uruchom skan' }))
+    await screen.findByRole('heading', { name: 'Scan scope' })
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
+    await screen.findByText(/no refresh/i)
+    await userEvent.click(screen.getByRole('button', { name: 'Run scan' }))
 
-    await screen.findByRole('heading', { name: 'Przebieg skanu' })
+    await screen.findByRole('heading', { name: 'Scan in progress' })
     expect(screen.getByText('2 / 5')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Postęp' })).toHaveAttribute('data-active', 'true')
+    expect(screen.getByRole('button', { name: 'Progress' })).toHaveAttribute('data-active', 'true')
   })
 
   it('shows a button to view the report once the scan is done, and navigates to ReportStep', async () => {
@@ -117,17 +117,17 @@ describe('App (ScanWizard)', () => {
     render(<App />)
 
     const file = new File(['nazwa;cena'], 'catalog.csv', { type: 'text/csv' })
-    await userEvent.upload(screen.getByLabelText(/plik CSV/i), file)
-    await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
-    await screen.findByRole('heading', { name: 'Mapowanie kolumn' })
-    await userEvent.click(screen.getByRole('button', { name: 'Dalej' }))
-    await screen.findByRole('heading', { name: 'Zakres skanu' })
-    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
-    await screen.findByText(/bez odświeżania/i)
-    await userEvent.click(screen.getByRole('button', { name: 'Uruchom skan' }))
-    await screen.findByRole('button', { name: 'Zobacz raport' })
+    await userEvent.upload(screen.getByLabelText(/wholesaler CSV/i), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await screen.findByRole('heading', { name: 'Column mapping' })
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await screen.findByRole('heading', { name: 'Scan scope' })
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
+    await screen.findByText(/no refresh/i)
+    await userEvent.click(screen.getByRole('button', { name: 'Run scan' }))
+    await screen.findByRole('button', { name: 'View report' })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Zobacz raport' }))
+    await userEvent.click(screen.getByRole('button', { name: 'View report' }))
 
     expect(await screen.findByText('+10.0%')).toBeInTheDocument()
   })
@@ -140,9 +140,9 @@ describe('App (ScanWizard)', () => {
     }) as unknown as typeof fetch
 
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /kuchnia/i }))
+    await userEvent.click(screen.getByRole('button', { name: /kitchen/i }))
 
-    await screen.findByRole('heading', { name: 'Zakres skanu' })
-    expect(screen.queryByRole('heading', { name: 'Mapowanie kolumn' })).not.toBeInTheDocument()
+    await screen.findByRole('heading', { name: 'Scan scope' })
+    expect(screen.queryByRole('heading', { name: 'Column mapping' })).not.toBeInTheDocument()
   })
 })

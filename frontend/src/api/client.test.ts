@@ -196,13 +196,13 @@ describe('getReportProducts', () => {
     const result = await getReportProducts(
       'scan-1',
       { commissionPct: '0.10', shippingCost: '15.00', vatPct: '0.23', returnsPct: '0.02' },
-      { category: 'Elektronika', status: 'computable', sort: 'margin_desc', page: 2, pageSize: 10 },
+      { category: 'Electronics', status: 'computable', sort: 'margin_desc', page: 2, pageSize: 10 },
     )
 
     expect(result).toEqual(page)
     const [url] = vi.mocked(fetch).mock.calls[0]
     expect(url).toContain('/scans/scan-1/report/products?')
-    expect(url).toContain('category=Elektronika')
+    expect(url).toContain('category=Electronics')
     expect(url).toContain('status=computable')
     expect(url).toContain('sort=margin_desc')
     expect(url).toContain('page=2')
@@ -223,9 +223,9 @@ describe('getReportProducts', () => {
 })
 
 const CSV_PREVIEW = {
-  headers: ['Nazwa', 'Cena hurtowa', 'EAN', 'Kategoria'],
-  mapping: { name: 'Nazwa', wholesale_price: 'Cena hurtowa', ean: 'EAN', category: 'Kategoria', sku: null },
-  sample_rows: [{ Nazwa: 'Produkt A', 'Cena hurtowa': '10,00', EAN: '5901234123457', Kategoria: 'Elektronika' }],
+  headers: ['Name', 'Wholesale price', 'EAN', 'Category'],
+  mapping: { name: 'Name', wholesale_price: 'Wholesale price', ean: 'EAN', category: 'Category', sku: null },
+  sample_rows: [{ Name: 'Produkt A', 'Wholesale price': '10,00', EAN: '5901234123457', Category: 'Electronics' }],
   total_rows: 1,
   parsed_count: 1,
   warnings: [],
@@ -259,17 +259,17 @@ describe('getCsvPreview', () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse(CSV_PREVIEW))
     const file = new File(['a,b\n1,2'], 'catalog.csv', { type: 'text/csv' })
     const mapping: ColumnMapping = {
-      name: 'Nazwa', wholesale_price: 'Cena hurtowa', ean: 'EAN', category: 'Kategoria', sku: null,
+      name: 'Name', wholesale_price: 'Wholesale price', ean: 'EAN', category: 'Category', sku: null,
     }
 
     await getCsvPreview(file, mapping)
 
     const [, init] = vi.mocked(fetch).mock.calls[0]
     const body = init?.body as FormData
-    expect(body.get('name_column')).toBe('Nazwa')
-    expect(body.get('wholesale_price_column')).toBe('Cena hurtowa')
+    expect(body.get('name_column')).toBe('Name')
+    expect(body.get('wholesale_price_column')).toBe('Wholesale price')
     expect(body.get('ean_column')).toBe('EAN')
-    expect(body.get('category_column')).toBe('Kategoria')
+    expect(body.get('category_column')).toBe('Category')
     expect(body.get('sku_column')).toBeNull()
   })
 
@@ -304,7 +304,7 @@ describe('createScan with a column mapping', () => {
     )
     const file = new File(['a,b\n1,2'], 'catalog.csv', { type: 'text/csv' })
     const mapping: ColumnMapping = {
-      name: 'Nazwa', wholesale_price: 'Cena hurtowa', ean: 'EAN', category: 'Kategoria', sku: 'SKU',
+      name: 'Name', wholesale_price: 'Wholesale price', ean: 'EAN', category: 'Category', sku: 'SKU',
     }
     const scope: ScopeConfig = {
       scopeType: 'full', market: 'PL', maxDeliveryDays: 5, maxConcurrency: 5, stalenessThresholdDays: 14,
@@ -314,7 +314,7 @@ describe('createScan with a column mapping', () => {
 
     const [, init] = vi.mocked(fetch).mock.calls[0]
     const body = init?.body as FormData
-    expect(body.get('name_column')).toBe('Nazwa')
+    expect(body.get('name_column')).toBe('Name')
     expect(body.get('sku_column')).toBe('SKU')
   })
 })

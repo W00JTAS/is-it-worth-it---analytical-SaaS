@@ -93,14 +93,14 @@ export function AppShell({ currentStep, children }: AppShellProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label={theme === 'dark' ? 'Przełącz na jasny motyw' : 'Przełącz na ciemny motyw'}
+                  aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
                   onClick={toggleTheme}
                 >
                   {theme === 'dark' ? <Sun /> : <Moon />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="right" align="center">
-                {theme === 'dark' ? 'Przełącz na jasny motyw' : 'Przełącz na ciemny motyw'}
+                {theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
               </TooltipContent>
             </Tooltip>
           </SidebarFooter>

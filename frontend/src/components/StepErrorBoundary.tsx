@@ -27,9 +27,9 @@ export class StepErrorBoundary extends Component<StepErrorBoundaryProps, StepErr
     if (this.state.hasError) {
       return (
         <div className="p-8">
-          <p className="text-sm text-destructive">Nie udało się załadować tego kroku.</p>
+          <p className="text-sm text-destructive">Could not load this step.</p>
           <Button type="button" variant="outline" className="mt-3" onClick={this.handleRetry}>
-            Spróbuj ponownie
+            Try again
           </Button>
         </div>
       )

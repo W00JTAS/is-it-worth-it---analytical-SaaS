@@ -17,14 +17,8 @@ interface ScopeEstimateStepProps {
   onStarted: (scanId: string) => void
 }
 
-// Standard Polish plural rules for "produkt": 1 -> singular, 2-4 (excluding
-// 12-14) -> "few" form, everything else (0, 5+, 12-14) -> "many" form.
-function pluralizeProdukt(n: number): string {
-  if (n === 1) return 'produkt'
-  const lastDigit = n % 10
-  const lastTwo = n % 100
-  if (lastDigit >= 2 && lastDigit <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) return 'produkty'
-  return 'produktów'
+function pluralizeProduct(n: number): string {
+  return n === 1 ? 'product' : 'products'
 }
 
 export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstimateStepProps) {
@@ -103,7 +97,7 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
       }
     } catch (err) {
       if (estimateRequestIdRef.current === requestId) {
-        setError(err instanceof ApiError ? err.message : 'Nie udało się oszacować kosztu')
+        setError(err instanceof ApiError ? err.message : 'Could not estimate the cost')
       }
     } finally {
       if (estimateRequestIdRef.current === requestId) {
@@ -120,7 +114,7 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
       await startScan(result.scan_id, forceRefreshStale)
       onStarted(result.scan_id)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Nie udało się uruchomić skanu')
+      setError(err instanceof ApiError ? err.message : 'Could not start the scan')
     } finally {
       setIsStarting(false)
     }
@@ -128,7 +122,7 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 p-8">
-      <h1 className="text-xl font-semibold text-foreground">Zakres skanu</h1>
+      <h1 className="text-xl font-semibold text-foreground">Scan scope</h1>
 
       <fieldset className="flex flex-col gap-3 text-sm text-muted-foreground">
         <RadioGroup
@@ -138,16 +132,16 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="full" id="scope-full" />
-            <Label htmlFor="scope-full">Pełny skan</Label>
+            <Label htmlFor="scope-full">Full scan</Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="sample" id="scope-sample" />
-            <Label htmlFor="scope-sample">Próbka per kategoria</Label>
+            <Label htmlFor="scope-sample">Sample per category</Label>
           </div>
         </RadioGroup>
         {scopeType === 'sample' && (
           <div className="flex flex-col gap-1 pl-6">
-            <Label htmlFor="sample-per-category">Liczba produktów per kategoria</Label>
+            <Label htmlFor="sample-per-category">Products per category</Label>
             <Input
               id="sample-per-category"
               type="number"
@@ -162,7 +156,7 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
       </fieldset>
 
       <div className="flex flex-col gap-1">
-        <Label htmlFor="max-delivery-days">Limit czasu dostawy (dni)</Label>
+        <Label htmlFor="max-delivery-days">Delivery time limit (days)</Label>
         <Input
           id="max-delivery-days"
           type="number"
@@ -178,15 +172,15 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" className="group flex items-center gap-2 self-start px-0 text-sm text-muted-foreground">
             <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
-            Ustawienia zaawansowane
+            Advanced settings
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="flex flex-col gap-4 pt-2">
           <div className="flex flex-col gap-1">
-            <Label htmlFor="max-concurrency">Limit współbieżności</Label>
+            <Label htmlFor="max-concurrency">Concurrency limit</Label>
             <p className="text-xs text-muted-foreground">
-              Ile ofert sprawdzamy jednocześnie. Wyższa wartość = szybciej, ale większe ryzyko
-              trafienia w limity dostawcy danych.
+              How many offers we check at once. Higher is faster, but more likely to hit the
+              data provider's rate limits.
             </p>
             <Input
               id="max-concurrency"
@@ -200,10 +194,10 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
           </div>
 
           <div className="flex flex-col gap-1">
-            <Label htmlFor="staleness-threshold">Próg nieświeżości (dni)</Label>
+            <Label htmlFor="staleness-threshold">Staleness threshold (days)</Label>
             <p className="text-xs text-muted-foreground">
-              Po ilu dniach cena z poprzedniego skanu jest uznawana za nieaktualną i sprawdzana
-              ponownie zamiast użyta z pamięci.
+              After how many days a price from an earlier scan counts as out of date and gets
+              checked again instead of being reused from cache.
             </p>
             <Input
               id="staleness-threshold"
@@ -222,28 +216,28 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
 
       {!result && (
         <Button type="button" onClick={handleEstimate} disabled={isEstimating} className="self-start">
-          Oszacuj koszt
+          Estimate cost
         </Button>
       )}
 
       {result && (
         <div className="flex flex-col gap-3 rounded-md border border-border p-6 text-sm text-foreground">
           <p>
-            Bez odświeżania:{' '}
+            No refresh:{' '}
             <span className="font-semibold">
               {result.estimate.cost_usd_without_refresh} USD (~{result.estimate.seconds_without_refresh}s)
             </span>
           </p>
           <p>
-            Z odświeżaniem:{' '}
+            With refresh:{' '}
             <span className="font-semibold">
               {result.estimate.cost_usd_with_refresh} USD (~{result.estimate.seconds_with_refresh}s)
             </span>
           </p>
           {result.overlapping_count > 0 && (
             <p>
-              {result.overlapping_count} {pluralizeProdukt(result.overlapping_count)} w tym skanie
-              nakładają się z poprzednimi skanami.
+              {result.overlapping_count} {pluralizeProduct(result.overlapping_count)} in this scan
+              overlap with earlier scans.
             </p>
           )}
           {result.stale_count > 0 && (
@@ -253,8 +247,8 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
                 onCheckedChange={(checked) => setForceRefreshStale(checked === true)}
                 disabled={fieldsDisabled}
               />
-              Odśwież nieświeże ({result.stale_count} {pluralizeProdukt(result.stale_count)} z nich nie
-              sprawdzano od dawna)
+              Refresh stale entries ({result.stale_count} {pluralizeProduct(result.stale_count)} have
+              not been checked in a while)
             </label>
           )}
           {result.warnings.length > 0 && (
@@ -265,7 +259,7 @@ export function ScopeEstimateStep({ file, columnMapping, onStarted }: ScopeEstim
             />
           )}
           <Button type="button" onClick={handleStart} disabled={isStarting} className="self-start">
-            Uruchom skan
+            Run scan
           </Button>
         </div>
       )}

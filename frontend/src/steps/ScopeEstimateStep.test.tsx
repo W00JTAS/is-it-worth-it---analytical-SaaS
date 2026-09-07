@@ -42,7 +42,7 @@ describe('ScopeEstimateStep', () => {
     const createScanSpy = vi.spyOn(client, 'createScan').mockResolvedValue(CREATE_RESULT)
     render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
 
     await waitFor(() => expect(createScanSpy).toHaveBeenCalledTimes(1))
     expect(createScanSpy).toHaveBeenCalledWith(
@@ -57,12 +57,12 @@ describe('ScopeEstimateStep', () => {
       },
       MAPPING,
     )
-    expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no refresh/i)).toBeInTheDocument()
     expect(screen.getByText(/0\.08 USD.*~4s/)).toBeInTheDocument()
-    expect(screen.getByText(/z odświeżaniem/i)).toBeInTheDocument()
+    expect(screen.getByText(/with refresh/i)).toBeInTheDocument()
     expect(screen.getByText(/0\.10 USD.*~5s/)).toBeInTheDocument()
-    expect(screen.getByText(/2 produkty.*nakładają się/i)).toBeInTheDocument()
-    expect(screen.getByText(/1 produkt z nich nie sprawdzano/i)).toBeInTheDocument()
+    expect(screen.getByText(/2 products.*overlap/i)).toBeInTheDocument()
+    expect(screen.getByText(/1 product.*not been checked/i)).toBeInTheDocument()
     expect(screen.getByText(/invalid EAN checksum/)).toBeInTheDocument()
   })
 
@@ -70,10 +70,10 @@ describe('ScopeEstimateStep', () => {
     const createScanSpy = vi.spyOn(client, 'createScan').mockResolvedValue(CREATE_RESULT)
     render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
-    await userEvent.click(screen.getByLabelText('Próbka per kategoria'))
-    await userEvent.clear(screen.getByLabelText(/liczba produktów per kategoria/i))
-    await userEvent.type(screen.getByLabelText(/liczba produktów per kategoria/i), '25')
-    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
+    await userEvent.click(screen.getByLabelText('Sample per category'))
+    await userEvent.clear(screen.getByLabelText(/products per category/i))
+    await userEvent.type(screen.getByLabelText(/products per category/i), '25')
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
 
     await waitFor(() =>
       expect(createScanSpy).toHaveBeenCalledWith(
@@ -90,10 +90,10 @@ describe('ScopeEstimateStep', () => {
     const onStarted = vi.fn()
     render(<ScopeEstimateStep file={FILE} onStarted={onStarted} columnMapping={MAPPING} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
-    await screen.findByText(/bez odświeżania/i)
-    await userEvent.click(screen.getByLabelText(/odśwież nieświeże/i))
-    await userEvent.click(screen.getByRole('button', { name: 'Uruchom skan' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
+    await screen.findByText(/no refresh/i)
+    await userEvent.click(screen.getByLabelText(/refresh stale entries/i))
+    await userEvent.click(screen.getByRole('button', { name: 'Run scan' }))
 
     await waitFor(() => expect(startScanSpy).toHaveBeenCalledWith('scan-1', true))
     expect(onStarted).toHaveBeenCalledWith('scan-1')
@@ -103,14 +103,14 @@ describe('ScopeEstimateStep', () => {
     const createScanSpy = vi.spyOn(client, 'createScan').mockResolvedValue(CREATE_RESULT)
     render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
-    expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
+    expect(await screen.findByText(/no refresh/i)).toBeInTheDocument()
 
-    await userEvent.click(screen.getByLabelText('Próbka per kategoria'))
+    await userEvent.click(screen.getByLabelText('Sample per category'))
 
-    expect(screen.queryByText(/bez odświeżania/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no refresh/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/0\.08 USD/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Oszacuj koszt' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Estimate cost' })).toBeInTheDocument()
     expect(createScanSpy).toHaveBeenCalledTimes(1)
   })
 
@@ -118,10 +118,10 @@ describe('ScopeEstimateStep', () => {
     vi.spyOn(client, 'createScan').mockResolvedValue({ ...CREATE_RESULT, overlapping_count: 0 })
     render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
 
-    expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
-    expect(screen.queryByText(/nakładają się/i)).not.toBeInTheDocument()
+    expect(await screen.findByText(/no refresh/i)).toBeInTheDocument()
+    expect(screen.queryByText(/overlap/i)).not.toBeInTheDocument()
   })
 
   it('disables all scope fields while an estimate request is in flight, closing the field-change race', async () => {
@@ -133,39 +133,39 @@ describe('ScopeEstimateStep', () => {
         }),
     )
     render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
-    await userEvent.click(screen.getByRole('button', { name: /ustawienia zaawansowane/i }))
+    await userEvent.click(screen.getByRole('button', { name: /advanced settings/i }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
     await waitFor(() => expect(createScanSpy).toHaveBeenCalledTimes(1))
 
     // While the request is pending, every field that feeds the scope config
     // must be disabled — otherwise the user could change the config before
     // this in-flight response resolves, and the stale response would still
     // land in `result`.
-    expect(screen.getByLabelText('Pełny skan')).toBeDisabled()
-    expect(screen.getByLabelText('Próbka per kategoria')).toBeDisabled()
-    expect(screen.getByLabelText(/limit czasu dostawy/i)).toBeDisabled()
-    expect(screen.getByLabelText(/limit współbieżności/i)).toBeDisabled()
-    expect(screen.getByLabelText(/próg nieświeżości/i)).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Oszacuj koszt' })).toBeDisabled()
+    expect(screen.getByLabelText('Full scan')).toBeDisabled()
+    expect(screen.getByLabelText('Sample per category')).toBeDisabled()
+    expect(screen.getByLabelText(/delivery time limit/i)).toBeDisabled()
+    expect(screen.getByLabelText(/concurrency limit/i)).toBeDisabled()
+    expect(screen.getByLabelText(/staleness threshold/i)).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Estimate cost' })).toBeDisabled()
 
     resolveCreateScan(CREATE_RESULT)
 
-    expect(await screen.findByText(/bez odświeżania/i)).toBeInTheDocument()
-    expect(screen.getByLabelText('Pełny skan')).not.toBeDisabled()
+    expect(await screen.findByText(/no refresh/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Full scan')).not.toBeDisabled()
   })
 
   it('keeps advanced settings collapsed by default, with plain-language help text once opened', async () => {
     render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
-    expect(screen.queryByLabelText(/limit współbieżności/i)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/próg nieświeżości/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/concurrency limit/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/staleness threshold/i)).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /ustawienia zaawansowane/i }))
+    await userEvent.click(screen.getByRole('button', { name: /advanced settings/i }))
 
-    expect(screen.getByLabelText(/limit współbieżności/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/limit współbieżności/i)).toHaveValue(5)
-    expect(screen.getByLabelText(/próg nieświeżości/i)).toHaveValue(14)
+    expect(screen.getByLabelText(/concurrency limit/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/concurrency limit/i)).toHaveValue(5)
+    expect(screen.getByLabelText(/staleness threshold/i)).toHaveValue(14)
   })
 
   // Note on the request-id guard (defense in depth in handleEstimate, see
@@ -192,7 +192,7 @@ describe('ScopeEstimateStep', () => {
     )
     render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
 
     expect(await screen.findByText('max_concurrency must be >= 1, got 0')).toBeInTheDocument()
   })
@@ -201,7 +201,7 @@ describe('ScopeEstimateStep', () => {
     const createScanSpy = vi.spyOn(client, 'createScan').mockResolvedValue(CREATE_RESULT)
     render(<ScopeEstimateStep file={FILE} onStarted={vi.fn()} columnMapping={MAPPING} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Oszacuj koszt' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
 
     await waitFor(() => expect(createScanSpy).toHaveBeenCalledTimes(1))
     expect(createScanSpy).toHaveBeenCalledWith(FILE, expect.anything(), MAPPING)

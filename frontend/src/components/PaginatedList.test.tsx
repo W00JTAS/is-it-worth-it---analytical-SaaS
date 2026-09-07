@@ -70,11 +70,11 @@ describe('PaginatedList', () => {
         items={[]}
         pageSize={10}
         renderItem={(item) => <span>{String(item)}</span>}
-        emptyState={<p>Brak wpisów</p>}
+        emptyState={<p>No entries</p>}
       />
     )
 
-    expect(screen.getByText('Brak wpisów')).toBeInTheDocument()
+    expect(screen.getByText('No entries')).toBeInTheDocument()
   })
 
   it('clamps page to current pageCount to prevent transient blank renders when items shrink', async () => {

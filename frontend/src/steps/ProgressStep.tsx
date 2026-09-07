@@ -21,7 +21,7 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
   if (!scan) {
     return (
       <div className="mx-auto max-w-md p-8">
-        <p className="text-sm text-muted-foreground">Łączenie ze skanem…</p>
+        <p className="text-sm text-muted-foreground">Connecting to the scan…</p>
       </div>
     )
   }
@@ -37,10 +37,10 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 p-8">
-      <h1 className="text-xl font-semibold text-foreground">Przebieg skanu</h1>
+      <h1 className="text-xl font-semibold text-foreground">Scan in progress</h1>
       <Progress
         value={displayPercent}
-        aria-label="Postęp skanu"
+        aria-label="Scan progress"
         indicatorClassName={scan.status === 'failed' ? 'bg-destructive' : undefined}
       />
       <p className="text-sm text-muted-foreground">
@@ -48,7 +48,7 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
       </p>
       {source === 'polling' && (
         <p className="text-xs text-muted-foreground">
-          Połączenie na żywo zerwane — aktualizacja co kilka sekund.
+          Live connection lost — refreshing every few seconds.
         </p>
       )}
       {isTerminal && (
@@ -63,13 +63,13 @@ export function ProgressStep({ scanId, onDone }: ProgressStepProps) {
             }`}
           >
             {scan.status === 'done'
-              ? 'Skan zakończony.'
+              ? 'Scan finished.'
               : scan.status === 'paused'
-                ? 'Skan wstrzymany — limit zapytań dostawcy wyczerpany. Uruchom skan ponownie później, aby dokończyć.'
-                : 'Skan zakończony z błędami.'}
+                ? 'Scan paused — the provider request limit is exhausted. Run the scan again later to finish it.'
+                : 'Scan finished with errors.'}
           </p>
           <Button type="button" onClick={() => onDone(scanId)}>
-            Zobacz raport
+            View report
           </Button>
         </>
       )}

@@ -27,11 +27,11 @@ const DEFAULT_COST_CONFIG: CostConfigInput = {
 const PAGE_SIZE = 25
 
 const STATUS_LABELS: Record<string, string> = {
-  computable: 'Policzone',
-  not_checked: 'Nie sprawdzono',
-  no_offer: 'Brak oferty',
-  currency_mismatch: 'Inna waluta',
-  anomaly: 'Oflagowane',
+  computable: 'Computed',
+  not_checked: 'Not checked',
+  no_offer: 'No offer',
+  currency_mismatch: 'Other currency',
+  anomaly: 'Flagged',
 }
 
 function statusLabel(row: ProductRow): string {
@@ -70,10 +70,10 @@ function ProductDetail({ row }: { row: ProductRow }) {
       {row.offer ? (
         <>
           <p>
-            Sprzedawca: <span className="text-foreground">{row.offer.seller}</span>
+            Seller: <span className="text-foreground">{row.offer.seller}</span>
           </p>
           <p>
-            Źródło:{' '}
+            Source:{' '}
             <a
               href={row.offer.source_url}
               target="_blank"
@@ -83,11 +83,11 @@ function ProductDetail({ row }: { row: ProductRow }) {
               {row.offer.source_url}
             </a>
           </p>
-          <p>Czas dostawy: {row.offer.delivery_days} dni</p>
-          <p>Pewność: {(row.offer.confidence * 100).toFixed(0)}%</p>
+          <p>Delivery time: {row.offer.delivery_days} days</p>
+          <p>Confidence: {(row.offer.confidence * 100).toFixed(0)}%</p>
         </>
       ) : (
-        <p>Brak znalezionej oferty.</p>
+        <p>No offer found.</p>
       )}
       {row.anomaly_flag && <p className="text-warning">Flaga: {row.anomaly_flag}</p>}
       {row.margin_matrix && (
@@ -95,9 +95,9 @@ function ProductDetail({ row }: { row: ProductRow }) {
         <table className="mt-2 w-full text-xs">
           <thead>
             <tr className="text-left text-muted-foreground">
-              <th className="font-normal">Scenariusz</th>
-              <th className="text-right font-normal">Marża %</th>
-              <th className="text-right font-normal">Cena sprzedaży</th>
+              <th className="font-normal">Scenario</th>
+              <th className="text-right font-normal">Margin %</th>
+              <th className="text-right font-normal">Selling price</th>
             </tr>
           </thead>
           <tbody>
@@ -152,7 +152,7 @@ interface ReportStepProps {
 export function ReportStep({ scanId }: ReportStepProps) {
   const [costConfig, setCostConfig] = useState<CostConfigInput>(loadStoredCostConfig)
   // The cost config values actually confirmed by the last successful
-  // "Przelicz" click (or the initial mount load) — as opposed to `costConfig`,
+  // "Recalculate" click (or the initial mount load) — as opposed to `costConfig`,
   // which tracks every keystroke in the input fields below. Product-list
   // requests (filter/sort/pager) must use this snapshot, never the live,
   // possibly-unconfirmed `costConfig`, so a mid-edit field never silently
@@ -206,7 +206,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
       }
     } catch (err) {
       if (productsRequestIdRef.current === requestId) {
-        setProductsError(err instanceof ApiError ? err.message : 'Nie udało się wczytać produktów')
+        setProductsError(err instanceof ApiError ? err.message : 'Could not load the products')
       }
     }
   }
@@ -249,7 +249,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
       await loadProducts({ page: 1 }, costConfig)
     } catch (err) {
       if (summaryRequestIdRef.current === requestId) {
-        setError(err instanceof ApiError ? err.message : 'Nie udało się policzyć raportu')
+        setError(err instanceof ApiError ? err.message : 'Could not compute the report')
       }
     } finally {
       if (summaryRequestIdRef.current === requestId) {
@@ -259,7 +259,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
   }
 
   // Runs once per scan (not per keystroke in the cost-config card below —
-  // that's deliberate, see recalculate() and the "Przelicz" button).
+  // that's deliberate, see recalculate() and the "Recalculate" button).
   useEffect(() => {
     recalculate()
   }, [scanId])
@@ -270,11 +270,11 @@ export function ReportStep({ scanId }: ReportStepProps) {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-12 p-8">
-      <h1 className="text-xl font-semibold text-foreground">Raport</h1>
+      <h1 className="text-xl font-semibold text-foreground">Report</h1>
 
       <section className="flex flex-col items-center gap-2 text-center">
         {isLoading ? (
-          <p className="text-2xl font-medium text-muted-foreground">Liczenie…</p>
+          <p className="text-2xl font-medium text-muted-foreground">Computing…</p>
         ) : verdictValue !== null ? (
           <>
             <p
@@ -287,7 +287,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
             </p>
             <p className="text-sm text-muted-foreground">
               {referenceScenario?.profitable_count ?? 0} / {summary?.counts.computable ?? 0}{' '}
-              produktów rentownych przy cenie rynkowej
+              products profitable at the market price
             </p>
           </>
         ) : error ? null : (
@@ -296,14 +296,14 @@ export function ReportStep({ scanId }: ReportStepProps) {
           // error/loading is in progress) — never while loading or after a
           // failed request, so this text no longer contradicts the error
           // message or flashes during every load.
-          <p className="text-2xl font-medium text-muted-foreground">Brak danych do policzenia</p>
+          <p className="text-2xl font-medium text-muted-foreground">Nothing to compute</p>
         )}
       </section>
 
       <section className="flex flex-col gap-4">
         <div className="divide-y divide-border rounded-lg border border-border bg-card">
           <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-            Prowizja
+            Commission
             <Input
               type="number"
               step="0.01"
@@ -314,7 +314,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
             />
           </label>
           <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-            Wysyłka
+            Shipping
             <Input
               type="number"
               step="0.01"
@@ -336,7 +336,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
             />
           </label>
           <label className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground">
-            Zwroty
+            Returns
             <Input
               type="number"
               step="0.01"
@@ -348,7 +348,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
           </label>
         </div>
         <Button type="button" onClick={recalculate} disabled={isLoading} className="self-start">
-          Przelicz
+          Recalculate
         </Button>
         {error && <p className="text-sm text-destructive">{error}</p>}
       </section>
@@ -357,12 +357,12 @@ export function ReportStep({ scanId }: ReportStepProps) {
         <section className="flex flex-wrap gap-2">
           {summary.counts.no_offer > 0 && (
             <span className="rounded-md bg-muted px-3 py-1 text-xs text-warning">
-              {summary.counts.no_offer} bez oferty
+              {summary.counts.no_offer} without an offer
             </span>
           )}
           {summary.counts.anomaly > 0 && (
             <span className="rounded-md bg-muted px-3 py-1 text-xs text-warning">
-              {summary.counts.anomaly} oflagowanych
+              {summary.counts.anomaly} flagged
             </span>
           )}
           {summary.counts.currency_mismatch > 0 && (
@@ -398,7 +398,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
                 >
                   {formatPct(row.avg_margin_pct)}
                 </p>
-                <p className="text-xs text-muted-foreground">{row.profitable_count} rentownych</p>
+                <p className="text-xs text-muted-foreground">{row.profitable_count} profitable</p>
               </div>
             )
           })}
@@ -407,14 +407,14 @@ export function ReportStep({ scanId }: ReportStepProps) {
 
       {summary && summary.category_table.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium text-muted-foreground">Kategorie</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">Categories</h2>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="font-normal text-muted-foreground">Kategoria</TableHead>
-                <TableHead className="text-right font-normal text-muted-foreground">Policzone</TableHead>
-                <TableHead className="text-right font-normal text-muted-foreground">Wykluczone</TableHead>
-                <TableHead className="text-right font-normal text-muted-foreground">Śr. marża</TableHead>
+                <TableHead className="font-normal text-muted-foreground">Category</TableHead>
+                <TableHead className="text-right font-normal text-muted-foreground">Computed</TableHead>
+                <TableHead className="text-right font-normal text-muted-foreground">Excluded</TableHead>
+                <TableHead className="text-right font-normal text-muted-foreground">Avg. margin</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -437,16 +437,16 @@ export function ReportStep({ scanId }: ReportStepProps) {
 
       {productPage && (
         <section className="flex flex-col gap-4">
-          <h2 className="text-sm font-medium text-muted-foreground">Produkty</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">Products</h2>
           <div className="flex flex-wrap gap-3 text-sm">
             <label className="flex items-center gap-2 text-muted-foreground">
-              Kategoria
+              Category
               <select
                 value={category}
                 onChange={(e) => handleCategoryChange(e.target.value)}
                 className={cn(SELECT_CLASS, 'w-auto')}
               >
-                <option value="">Wszystkie</option>
+                <option value="">All</option>
                 {Array.from(new Set(summary?.category_table.map((r) => r.category) ?? [])).map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
@@ -459,25 +459,25 @@ export function ReportStep({ scanId }: ReportStepProps) {
                 onChange={(e) => handleStatusChange(e.target.value)}
                 className={cn(SELECT_CLASS, 'w-auto')}
               >
-                <option value="">Wszystkie</option>
-                <option value="computable">Policzone</option>
-                <option value="no_offer">Bez oferty</option>
-                <option value="anomaly">Oflagowane</option>
-                <option value="currency_mismatch">Inna waluta</option>
-                <option value="not_checked">Nie sprawdzono</option>
+                <option value="">All</option>
+                <option value="computable">Computed</option>
+                <option value="no_offer">No offer</option>
+                <option value="anomaly">Flagged</option>
+                <option value="currency_mismatch">Other currency</option>
+                <option value="not_checked">Not checked</option>
               </select>
             </label>
             <label className="flex items-center gap-2 text-muted-foreground">
-              Sortowanie
+              Sort
               <select
                 value={sort}
                 onChange={(e) => handleSortChange(e.target.value)}
                 className={cn(SELECT_CLASS, 'w-auto')}
               >
-                <option value="category">Kategoria</option>
-                <option value="name">Nazwa</option>
-                <option value="margin_desc">Marża malejąco</option>
-                <option value="margin_asc">Marża rosnąco</option>
+                <option value="category">Category</option>
+                <option value="name">Name</option>
+                <option value="margin_desc">Margin, highest first</option>
+                <option value="margin_asc">Margin, lowest first</option>
               </select>
             </label>
           </div>
@@ -503,7 +503,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
               onClick={handlePrevPage}
               disabled={productPage.page <= 1}
             >
-              Poprzednia
+              Previous
             </Button>
             <span>
               Strona {productPage.page} z {Math.max(1, Math.ceil(productPage.total / productPage.page_size))}
@@ -515,7 +515,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
               onClick={handleNextPage}
               disabled={productPage.page * productPage.page_size >= productPage.total}
             >
-              Następna
+              Next
             </Button>
           </div>
         </section>

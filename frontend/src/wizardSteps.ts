@@ -10,8 +10,8 @@ export interface WizardStepMeta {
 
 export const WIZARD_STEPS: readonly WizardStepMeta[] = [
   { id: 'upload', label: 'Upload', icon: Upload },
-  { id: 'mapping', label: 'Mapowanie', icon: Columns3 },
-  { id: 'scope', label: 'Zakres', icon: Target },
-  { id: 'progress', label: 'Postęp', icon: Activity },
-  { id: 'report', label: 'Raport', icon: BarChart3 },
+  { id: 'mapping', label: 'Mapping', icon: Columns3 },
+  { id: 'scope', label: 'Scope', icon: Target },
+  { id: 'progress', label: 'Progress', icon: Activity },
+  { id: 'report', label: 'Report', icon: BarChart3 },
 ]

@@ -8,7 +8,7 @@ import type { ProductPage } from '../api/types'
 const SUMMARY = {
   counts: { total: 10, computable: 8, not_checked: 0, no_offer: 1, currency_mismatch: 0, anomaly: 1 },
   category_table: [
-    { category: 'Elektronika', computable_count: 8, excluded_count: 2, avg_margin_pct: '0.1200' },
+    { category: 'Electronics', computable_count: 8, excluded_count: 2, avg_margin_pct: '0.1200' },
   ],
   scenario_matrix: [
     { scenario_pct: '-0.10', avg_margin_pct: '0.0200', profitable_count: 5 },
@@ -40,8 +40,8 @@ describe('ReportStep', () => {
     vi.spyOn(client, 'getReportSummary').mockResolvedValue(SUMMARY)
     render(<ReportStep scanId="scan-1" />)
 
-    expect(await screen.findByText('1 bez oferty')).toBeInTheDocument()
-    expect(screen.getByText('1 oflagowanych')).toBeInTheDocument()
+    expect(await screen.findByText('1 without an offer')).toBeInTheDocument()
+    expect(screen.getByText('1 flagged')).toBeInTheDocument()
     expect(screen.queryByText(/innej waluty/)).not.toBeInTheDocument()
     expect(screen.queryByText(/nie sprawdzono/)).not.toBeInTheDocument()
   })
@@ -51,19 +51,19 @@ describe('ReportStep', () => {
     render(<ReportStep scanId="scan-1" />)
 
     await screen.findByText('+12.0%')
-    expect(screen.getByText('5 rentownych')).toBeInTheDocument()
-    expect(screen.getByText('Elektronika')).toBeInTheDocument()
+    expect(screen.getByText('5 profitable')).toBeInTheDocument()
+    expect(screen.getByText('Electronics')).toBeInTheDocument()
   })
 
-  it('recalculates with edited cost config when Przelicz is clicked, and persists to localStorage', async () => {
+  it('recalculates with edited cost config when Recalculate is clicked, and persists to localStorage', async () => {
     const spy = vi.spyOn(client, 'getReportSummary').mockResolvedValue(SUMMARY)
     render(<ReportStep scanId="scan-1" />)
     await screen.findByText('+12.0%')
 
-    const commissionInput = screen.getByLabelText('Prowizja')
+    const commissionInput = screen.getByLabelText('Commission')
     await userEvent.clear(commissionInput)
     await userEvent.type(commissionInput, '0.20')
-    await userEvent.click(screen.getByRole('button', { name: 'Przelicz' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Recalculate' }))
 
     await waitFor(() =>
       expect(spy).toHaveBeenLastCalledWith('scan-1', {
@@ -103,7 +103,7 @@ describe('ReportStep', () => {
     })
     render(<ReportStep scanId="scan-1" />)
 
-    expect(await screen.findByText('Brak danych do policzenia')).toBeInTheDocument()
+    expect(await screen.findByText('Nothing to compute')).toBeInTheDocument()
   })
 
   it('shows the API error message when the summary request fails', async () => {
@@ -114,7 +114,7 @@ describe('ReportStep', () => {
     expect(await screen.findByText('scan not found')).toBeInTheDocument()
     // The failure is a genuine error, not "nothing to compute" — the two
     // must never be asserted simultaneously.
-    expect(screen.queryByText('Brak danych do policzenia')).not.toBeInTheDocument()
+    expect(screen.queryByText('Nothing to compute')).not.toBeInTheDocument()
   })
 
   it('does not show the empty-state text while the initial summary request is still loading', async () => {
@@ -125,7 +125,7 @@ describe('ReportStep', () => {
     vi.spyOn(client, 'getReportSummary').mockReturnValue(pending)
     render(<ReportStep scanId="scan-1" />)
 
-    expect(screen.queryByText('Brak danych do policzenia')).not.toBeInTheDocument()
+    expect(screen.queryByText('Nothing to compute')).not.toBeInTheDocument()
 
     resolveSummary(SUMMARY)
     expect(await screen.findByText('+12.0%')).toBeInTheDocument()
@@ -138,7 +138,7 @@ const PRODUCT_PAGE: ProductPage = {
   page_size: 25,
   rows: [
     {
-      id: 1, external_id: 'p1', name: 'Zebra Gadget', category: 'Elektronika', ean: '123',
+      id: 1, external_id: 'p1', name: 'Zebra Gadget', category: 'Electronics', ean: '123',
       wholesale_price: '40.00', currency: 'PLN', computable: true,
       exclusion_reason: null, anomaly_flag: null,
       offer: {
@@ -153,7 +153,7 @@ const PRODUCT_PAGE: ProductPage = {
       ],
     },
     {
-      id: 2, external_id: 'p2', name: 'Apple Widget', category: 'Elektronika', ean: null,
+      id: 2, external_id: 'p2', name: 'Apple Widget', category: 'Electronics', ean: null,
       wholesale_price: '30.00', currency: 'PLN', computable: false,
       exclusion_reason: 'no_offer', anomaly_flag: null,
       offer: null, margin_matrix: null,
@@ -211,10 +211,10 @@ describe('ReportStep product drill-down', () => {
     render(<ReportStep scanId="scan-1" />)
     await screen.findByText('Zebra Gadget')
 
-    const commissionInput = screen.getByLabelText('Prowizja')
+    const commissionInput = screen.getByLabelText('Commission')
     await userEvent.clear(commissionInput)
     await userEvent.type(commissionInput, '0.99')
-    // Przelicz is deliberately NOT clicked — the edit above must stay
+    // Recalculate is deliberately NOT clicked — the edit above must stay
     // unconfirmed and not leak into the filter request below.
 
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'no_offer')
@@ -237,7 +237,7 @@ describe('ReportStep product drill-down', () => {
     expect(await screen.findByText('products boom')).toBeInTheDocument()
   })
 
-  it('requests the next page when Następna is clicked', async () => {
+  it('requests the next page when Next is clicked', async () => {
     vi.spyOn(client, 'getReportSummary').mockResolvedValue(SUMMARY)
     const productsSpy = vi.spyOn(client, 'getReportProducts').mockResolvedValue({
       ...PRODUCT_PAGE, total: 30,
@@ -245,7 +245,7 @@ describe('ReportStep product drill-down', () => {
     render(<ReportStep scanId="scan-1" />)
     await screen.findByText('Zebra Gadget')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Następna' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
 
     await waitFor(() =>
       expect(productsSpy).toHaveBeenLastCalledWith(

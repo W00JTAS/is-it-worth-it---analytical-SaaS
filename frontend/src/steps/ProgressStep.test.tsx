@@ -49,10 +49,10 @@ describe('ProgressStep', () => {
 
     render(<ProgressStep scanId="scan-1" onDone={vi.fn()} />)
 
-    expect(screen.getByText(/skan zakończony/i)).toBeInTheDocument()
+    expect(screen.getByText(/scan finished/i)).toBeInTheDocument()
     expect(screen.getByText('20 / 20')).toBeInTheDocument()
 
-    const doneMessage = screen.getByText(/skan zakończony/i)
+    const doneMessage = screen.getByText(/scan finished/i)
     expect(doneMessage.className).toContain('text-success')
     expect(doneMessage.className).not.toContain('text-destructive')
   })
@@ -73,7 +73,7 @@ describe('ProgressStep', () => {
 
     render(<ProgressStep scanId="scan-1" onDone={vi.fn()} />)
 
-    const failedMessage = screen.getByText(/skan zakończony z błędami/i)
+    const failedMessage = screen.getByText(/scan finished with errors/i)
     expect(failedMessage).toBeInTheDocument()
     expect(failedMessage.className).toContain('text-destructive')
     expect(failedMessage.className).not.toContain('text-success')
@@ -118,13 +118,13 @@ describe('ProgressStep', () => {
 
     render(<ProgressStep scanId="scan-1" onDone={vi.fn()} />)
 
-    const pausedMessage = screen.getByText(/skan wstrzymany/i)
+    const pausedMessage = screen.getByText(/scan paused/i)
     expect(pausedMessage).toBeInTheDocument()
     expect(pausedMessage.className).toContain('text-warning')
     expect(pausedMessage.className).not.toContain('text-destructive')
     expect(pausedMessage.className).not.toContain('text-success')
 
-    expect(screen.getByRole('button', { name: 'Zobacz raport' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View report' })).toBeInTheDocument()
   })
 
   it('shows a polling indicator when the source falls back to polling', () => {
@@ -144,7 +144,7 @@ describe('ProgressStep', () => {
 
     render(<ProgressStep scanId="scan-1" onDone={vi.fn()} />)
 
-    expect(screen.getByText(/aktualizacja co kilka sekund/i)).toBeInTheDocument()
+    expect(screen.getByText(/refreshing every few seconds/i)).toBeInTheDocument()
   })
 
   it('shows an error message when the hook reports one', () => {
@@ -155,7 +155,7 @@ describe('ProgressStep', () => {
     expect(screen.getByText('scan was never started')).toBeInTheDocument()
   })
 
-  it('calls onDone with the scan id when Zobacz raport is clicked, once the scan is done', async () => {
+  it('calls onDone with the scan id when View report is clicked, once the scan is done', async () => {
     const { default: userEvent } = await import('@testing-library/user-event')
     const onDone = vi.fn()
     mockScanEvents({
@@ -172,7 +172,7 @@ describe('ProgressStep', () => {
     })
 
     render(<ProgressStep scanId="scan-1" onDone={onDone} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Zobacz raport' }))
+    await userEvent.click(screen.getByRole('button', { name: 'View report' }))
 
     expect(onDone).toHaveBeenCalledWith('scan-1')
   })
