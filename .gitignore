@@ -7,11 +7,10 @@
 /*_z_cenami_i_ean.csv
 /catalog*.csv
 
-# Local agent tooling — not part of the project
+# Local agent tooling — never published (see ~/.claude/rules/claude-dir-nie-idzie-na-github.md)
+/.claude/
 /.agents/
 /skills-lock.json
-/.claude/agent-memory/
-/.claude/hooks/
 
 # Raw benchmark dumps — scraped third-party page content, not project code
 /backend/scripts/eval_results/
