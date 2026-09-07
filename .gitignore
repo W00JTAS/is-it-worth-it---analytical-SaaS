@@ -7,10 +7,15 @@
 /*_z_cenami_i_ean.csv
 /catalog*.csv
 
-# Local agent tooling — never published (see ~/.claude/rules/claude-dir-nie-idzie-na-github.md)
+# Local agent tooling and its artifacts — never published
+# (see ~/.claude/rules/claude-dir-nie-idzie-na-github.md)
 /.claude/
 /.agents/
+/.playwright-mcp/
+/.superpowers/
 /skills-lock.json
+# Stray debugging screenshots in the repo root
+/*.png
 
 # Raw benchmark dumps — scraped third-party page content, not project code
 /backend/scripts/eval_results/
