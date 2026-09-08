@@ -19,9 +19,11 @@ one click away on the upload screen, so the whole wizard — mapping, scope, cos
 layout — can be walked through with no key and no CSV of your own. Only the price-discovery step
 itself calls a paid API.
 
+After the one-time install in [Setup](#setup) below:
+
 ```bash
 cd backend && .venv/bin/uvicorn app.main:app --port 8000   # terminal 1
-cd frontend && npm install && npm run dev                  # terminal 2
+cd frontend && npm run dev                                 # terminal 2
 ```
 
 Then open `http://localhost:5173` and pick one of the demo catalogs.
@@ -44,12 +46,11 @@ Upload → Mapping → Scope + Estimate → Progress → Report
 3. **Scope + Estimate** — choose a full scan or a per-category sample, see the exact query
    count and USD cost *before* anything runs.
 4. **Progress** — live progress while the price-discovery job runs.
-
-![Scan scope with the cost estimate and the cache overlap](docs/images/estimate.png)
-
 5. **Report** — the verdict: average margin at the current price, a scenario matrix
    (−10%/−5%/0%/+5% around the market price), a per-category breakdown, and a paginated,
    filterable product drill-down with every offer's source link.
+
+![Scan scope with the cost estimate and the cache overlap](docs/images/estimate.png)
 
 ![The report: the verdict, editable cost assumptions, and the scenario matrix](docs/images/report.png)
 
