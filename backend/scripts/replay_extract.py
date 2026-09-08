@@ -12,7 +12,7 @@ Why this exists: 2026-09-02's price-bleed bugfix session (see
 through `FirecrawlProvider._extract` directly (skipping `_search` entirely)
 to test a prompt fix without spending any more of that scarce budget — using
 a one-off script that lived in `/tmp` and was lost when the session ended
-(see `.claude/rules/subagent-research-koszt-i-przetrwanie.md`'s "write to
+(see `.claude/rules/subagent-research-cost-and-survival.md`'s "write to
 disk, not just to memory" principle — applied here at the level of the
 *tool itself*, not just its findings). This script makes that technique
 permanent, tracked, and resumable.
@@ -251,6 +251,7 @@ def _replay_with_retry(
     start_time: float,
     budget_hours: float,
     sku: str,
+    product_name: str = "",
 ):
     """Calls provider._extract, retrying the SAME entry on ProviderRateLimited
     until it succeeds, a different exception occurs (propagated to the
@@ -262,7 +263,7 @@ def _replay_with_retry(
         if _budget_exhausted(start_time, budget_hours):
             return None, True
         try:
-            offer = provider._extract(parsed_results, market, max_delivery_days)
+            offer = provider._extract(parsed_results, market, max_delivery_days, product_name)
             return offer, False
         except ProviderRateLimited as exc:
             wait = exc.retry_after if exc.retry_after is not None else DEFAULT_RATE_LIMIT_WAIT_SECONDS
@@ -364,6 +365,7 @@ def run_replay(
             offer, timed_out = _replay_with_retry(
                 provider, parsed, market, max_delivery_days,
                 wait_cap_seconds, start_time, budget_hours, sku,
+                entry.get("name", ""),
             )
         except ProviderAuthError:
             # Not an ordinary per-entry failure: a rejected key fails

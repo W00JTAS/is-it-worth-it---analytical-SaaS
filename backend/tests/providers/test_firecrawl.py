@@ -294,6 +294,34 @@ def test_extract_prompt_warns_against_title_description_variant_mismatch():
     assert "different variant named in the description" in prompt
 
 
+def test_extract_prompt_carries_the_searched_for_product_name():
+    # Regression for a structural gap found 2026-09-08
+    # (.claude/rules/groq-firecrawl-offer-validity-audit.md): _extract never
+    # received the product being searched for at all, only raw search
+    # snippets — so it had no ground truth to check a candidate result's
+    # color/size/pack-quantity against. Two live-confirmed bugs followed: a
+    # gray beanbag resolved to a brown one, and a single-can food price
+    # resolved to a 12-pack listing. The extraction prompt must name the
+    # exact product being searched for and instruct rejecting a result whose
+    # own title/description names a different variant of it.
+    client = _TwoServiceClient(
+        search_payload=_search_response([
+            {"title": "Example Shop", "description": "Cena: 89.99 zl", "url": "https://example.com/product"},
+        ]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    provider.find_cheapest(
+        _make_product(name="Pufa worek sako KOTEK szary XL 130x90"),
+        market="PL", max_delivery_days=5,
+    )
+
+    prompt = client.requests[1]["json"]["messages"][0]["content"]
+    assert "Pufa worek sako KOTEK szary XL 130x90" in prompt
+    assert "pack" in prompt.lower() or "quantity" in prompt.lower()
+
+
 def test_extract_prompt_carries_market_and_deliverability_requirement():
     # Regression for the reviewer's Important finding: `market` reached
     # `_search` (for the location boost) but never `_extract`'s prompt, so

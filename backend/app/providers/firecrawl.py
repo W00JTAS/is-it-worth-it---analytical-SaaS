@@ -126,7 +126,7 @@ class FirecrawlProvider:
         self.last_search_text = self._format_snippets(results)
         if not results:
             return None
-        return self._extract(results, market, max_delivery_days)
+        return self._extract(results, market, max_delivery_days, product.name)
 
     def _search(self, product: Product, market: str) -> list[dict]:
         # EAN-first: live testing during this project's investigation found
@@ -189,7 +189,7 @@ class FirecrawlProvider:
         return web_results
 
     def _extract(
-        self, results: list[dict], market: str, max_delivery_days: int
+        self, results: list[dict], market: str, max_delivery_days: int, product_name: str = "",
     ) -> OfferResult | None:
         # Order-preserving de-duplication, same intent as GroqProvider's
         # citation handling.
@@ -209,7 +209,9 @@ class FirecrawlProvider:
                     "messages": [
                         {
                             "role": "user",
-                            "content": self._build_extract_prompt(results, market, max_delivery_days),
+                            "content": self._build_extract_prompt(
+                                results, market, max_delivery_days, product_name,
+                            ),
                         }
                     ],
                     "response_format": {
@@ -270,7 +272,9 @@ class FirecrawlProvider:
             lines.append(f"{index}. {title}\n   {description}\n   {url}")
         return "\n".join(lines)
 
-    def _build_extract_prompt(self, results: list[dict], market: str, max_delivery_days: int) -> str:
+    def _build_extract_prompt(
+        self, results: list[dict], market: str, max_delivery_days: int, product_name: str = "",
+    ) -> str:
         snippets = self._format_snippets(results)
         # min(): if max_delivery_days itself is below the generic default (1
         # or 2 days), the fallback must not exceed it either, or
@@ -278,6 +282,12 @@ class FirecrawlProvider:
         # offer outright.
         default_delivery_days = min(DEFAULT_DELIVERY_DAYS, max_delivery_days)
         return (
+            f'The product being searched for is: "{product_name}". Only extract a price for a '
+            "result that matches this exact product — if a result's own title or description "
+            "names a different color, size, model, or pack/quantity than what's stated above (for "
+            "example, the target is a single unit but the result describes a multi-unit pack, or "
+            "the target is one color but the result is a different color), do not use it; treat "
+            "it as a different item, not this one.\n\n"
             "Below is a numbered list of web search results (title / description / url) for a "
             "product. Extract the cheapest genuine, currently-buyable offer described into the "
             "requested JSON schema. Prices and sellers are often stated directly in the "
