@@ -270,6 +270,30 @@ def test_extract_prompt_warns_against_secondary_upsell_prices():
     assert "drifts partway through" in prompt.lower()
 
 
+def test_extract_prompt_warns_against_title_description_variant_mismatch():
+    # Regression for a live eval finding (2026-09-08,
+    # .claude/rules/groq-firecrawl-offer-validity-audit.md): a result titled
+    # "...unisex różowe" (pink) had a description whose price sentence
+    # actually named a different color ("...unisex żółte", yellow) — the
+    # existing "drifts partway through into a different product" language
+    # didn't stop the model using that price under the pink result's URL.
+    # The prompt must tell the model to compare the result's own title
+    # variant against its description's variant explicitly.
+    client = _TwoServiceClient(
+        search_payload=_search_response([
+            {"title": "Example Shop", "description": "Cena: 89.99 zl", "url": "https://example.com/product"},
+        ]),
+        extract_payload=_extract_response({"found": False}),
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    prompt = client.requests[1]["json"]["messages"][0]["content"].lower()
+    assert "title" in prompt and "description" in prompt
+    assert "different variant named in the description" in prompt
+
+
 def test_extract_prompt_carries_market_and_deliverability_requirement():
     # Regression for the reviewer's Important finding: `market` reached
     # `_search` (for the location boost) but never `_extract`'s prompt, so
