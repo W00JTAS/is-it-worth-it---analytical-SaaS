@@ -91,3 +91,36 @@ def test_normalizes_euro_and_dollar_symbols():
         )
         assert offer is not None
         assert offer.currency == iso
+
+
+def test_rejects_known_price_comparison_aggregator_domains():
+    # Regression for a live eval run (2026-09-08): despite an explicit prompt
+    # instruction to prefer the actual seller's page over a price-comparison
+    # site, GroqProvider/FirecrawlProvider still confidently extracted
+    # ceneo.pl and skapiec.pl comparison pages as source_url in 3/23 found
+    # offers — one of them (skapiec.pl) with a price that matched nothing on
+    # the actual cited page (fabricated). A prose instruction is not reliable
+    # enough here; a domain check is deterministic. See
+    # .claude/rules/groq-firecrawl-offer-validity-audit.md's 2026-09-08 update.
+    for url in (
+        "https://www.ceneo.pl/100716985?srsltid=abc",
+        "https://www.skapiec.pl/site/cat/8/comp/882235706",
+        "http://skapiec.pl/foo",
+    ):
+        parsed = {
+            "found": True, "price": 10.0, "currency": "PLN", "seller": "X",
+            "source_url": url, "delivery_days": 2, "confidence": 0.9,
+        }
+        assert validate_offer_fields(
+            parsed, raw_response="{}", citations=(), max_delivery_days=5
+        ) is None, url
+
+
+def test_does_not_reject_a_direct_seller_domain():
+    parsed = {
+        "found": True, "price": 10.0, "currency": "PLN", "seller": "X",
+        "source_url": "https://www.x-kom.pl/p/12345.html", "delivery_days": 2, "confidence": 0.9,
+    }
+    assert validate_offer_fields(
+        parsed, raw_response="{}", citations=(), max_delivery_days=5
+    ) is not None

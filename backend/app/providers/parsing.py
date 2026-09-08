@@ -3,8 +3,28 @@ from __future__ import annotations
 import math
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from urllib.parse import urlparse
 
 from app.providers.base import OfferResult
+
+# Price-comparison / deal-aggregator sites confirmed live (2026-09-08 eval
+# run, .claude/rules/groq-firecrawl-offer-validity-audit.md) to slip past the
+# extraction prompt's explicit "prefer the seller's own page" instruction —
+# in 3/23 found offers, despite that instruction. One of the three (a
+# skapiec.pl comparison page) carried a price that matched nothing on the
+# actual cited page, i.e. likely fabricated on top of the wrong provenance.
+# A prose instruction is not reliable enough on its own; a hostname check is
+# deterministic and can't be talked out of its answer. Only domains actually
+# observed live go here — see MARKET_LOCATION_NAMES in firecrawl.py for the
+# same "don't pre-populate speculative entries" reasoning.
+AGGREGATOR_DOMAINS: frozenset[str] = frozenset({"ceneo.pl", "skapiec.pl"})
+
+
+def _is_aggregator_url(url: str) -> bool:
+    hostname = (urlparse(url).hostname or "").lower()
+    return hostname in AGGREGATOR_DOMAINS or any(
+        hostname.endswith(f".{domain}") for domain in AGGREGATOR_DOMAINS
+    )
 
 # A grounded search occasionally has the model write a currency symbol
 # instead of an ISO 4217 code (e.g. "zł" for PLN) — evidenced in
@@ -64,6 +84,8 @@ def validate_offer_fields(
 
     source_url = parsed.get("source_url")
     if not source_url:
+        return None
+    if _is_aggregator_url(source_url):
         return None
 
     currency = parsed.get("currency", "PLN")
