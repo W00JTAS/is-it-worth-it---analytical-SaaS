@@ -59,7 +59,10 @@ export function AppShell({ currentStep, children }: AppShellProps) {
             <span className="flex items-baseline overflow-hidden px-2 py-1 text-sm font-semibold tracking-tight">
               <span>IS</span>
               <span className="grid grid-cols-[1fr] transition-[grid-template-columns] duration-200 ease-linear group-data-[collapsible=icon]:grid-cols-[0fr]">
-                <span className="min-w-0 overflow-hidden whitespace-nowrap">{' IT WORTH IT'}</span>
+                {/* A non-breaking space, not a plain one: this span starts its own line box,
+                    and CSS strips leading whitespace there — so a normal space is present in
+                    textContent (and passes a naive test) while the title paints as "ISIT". */}
+                <span className="min-w-0 overflow-hidden whitespace-nowrap">{'\u00a0IT WORTH IT'}</span>
               </span>
               <span>?</span>
             </span>

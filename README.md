@@ -26,6 +26,12 @@ cd frontend && npm install && npm run dev                  # terminal 2
 
 Then open `http://localhost:5173` and pick one of the demo catalogs.
 
+![The upload screen, with the three demo catalogs](docs/images/upload.png)
+
+On the free Groq tier a 25-product scan usually exhausts the daily budget partway
+through; the scan then pauses, says how many products it left unchecked, and can be
+resumed later — everything already looked up is cached and is not paid for twice.
+
 ## How it works
 
 ```
@@ -38,9 +44,19 @@ Upload → Mapping → Scope + Estimate → Progress → Report
 3. **Scope + Estimate** — choose a full scan or a per-category sample, see the exact query
    count and USD cost *before* anything runs.
 4. **Progress** — live progress while the price-discovery job runs.
+
+![Scan scope with the cost estimate and the cache overlap](docs/images/estimate.png)
+
 5. **Report** — the verdict: average margin at the current price, a scenario matrix
    (−10%/−5%/0%/+5% around the market price), a per-category breakdown, and a paginated,
    filterable product drill-down with every offer's source link.
+
+![The report: the verdict, editable cost assumptions, and the scenario matrix](docs/images/report.png)
+
+The verdict above is a real run on the kitchen demo catalog: at the market price this catalog
+loses 3.3% per product on average, and only 6 of 15 checked products make money at all. That is
+the question the tool exists to answer, and "no" is a perfectly good answer to get before buying
+stock.
 
 Full design rationale lives in `docs/superpowers/specs/2026-07-28-is-it-worth-it-design.md`.
 
