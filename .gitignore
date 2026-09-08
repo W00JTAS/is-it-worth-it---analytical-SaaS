@@ -8,7 +8,7 @@
 /catalog*.csv
 
 # Local agent tooling and its artifacts — never published
-# (see ~/.claude/rules/claude-dir-nie-idzie-na-github.md)
+# (see ~/.claude/rules/claude-dir-never-on-github.md)
 /.claude/
 /.agents/
 /.playwright-mcp/
