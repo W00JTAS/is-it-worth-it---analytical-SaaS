@@ -551,8 +551,8 @@ def test_write_output_writes_valid_json_and_leaves_no_temp_file_behind(tmp_path)
 
 def test_write_output_never_corrupts_an_existing_file_if_the_swap_is_interrupted(monkeypatch, tmp_path):
     # Simulates a crash between "temp file written" and "renamed into
-    # place" — the exact scenario the atomic write exists to survive (see
-    # .claude/rules/sdd-interrupted-by-account-limit.md). The destination
+    # place" — the exact scenario the atomic write exists to survive.
+    # The destination
     # must be left exactly as it was before this call — the old complete
     # content — never truncated and never partially overwritten, since
     # os.replace() is the only step that touches out_path itself.

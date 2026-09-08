@@ -3,8 +3,8 @@ groq/compound-mini and reports the x-ratelimit-* headers Groq returns on
 every response (success or error).
 
 Exists because nothing checked remaining quota before a batch of live
-lookups — see `.claude/rules/groq-compound-free-tier-reliability.md`, which
-found the real daily bottleneck is an undocumented token-per-day limit on an
+lookups, and the real daily bottleneck turned out to be
+an undocumented token-per-day limit on an
 internal orchestration model (llama-3.3-70b-versatile, 100,000 tokens/day),
 not the advertised 250 requests/day on compound-mini itself. That rule file
 prescribes checking `x-ratelimit-remaining-*` headers before every eval run;
@@ -37,9 +37,8 @@ from app.providers.groq import API_URL, SEARCH_MODEL  # noqa: E402
 
 # Assumption: a real lookup (search call + extract call) costs roughly
 # ~2000 tokens on the search-orchestration model that gates the daily
-# budget (llama-3.3-70b-versatile) — see
-# .claude/rules/groq-compound-free-tier-reliability.md, which measured real
-# per-lookup costs in the ~2000-3300 tokens range across two days of live
+# budget (llama-3.3-70b-versatile). Measured
+# per-lookup costs landed in the ~2000-3300 tokens range across two days of live
 # evaluation before this session's Task 3 shortened the search prompt. This
 # is a rough estimate for a "should I even try a batch today" signal, not a
 # measured guarantee.
@@ -103,8 +102,7 @@ def probe(client: httpx.Client, api_key: str) -> ProbeResult:
 
 # Why the OK verdict is worded as an upper bound rather than a prediction:
 # x-ratelimit-remaining-tokens is compound-mini's OWN token counter, but the
-# binding daily limit measured in
-# .claude/rules/groq-compound-free-tier-reliability.md is an undocumented
+# binding daily limit measured in live runs is an undocumented
 # tokens-per-day budget on an INTERNAL orchestration model
 # (llama-3.3-70b-versatile, 100,000/day) that this header does not reflect at
 # all — real runs died with 86/250 requests and a healthy-looking token
@@ -112,7 +110,7 @@ def probe(client: httpx.Client, api_key: str) -> ProbeResult:
 # day; the probe call succeeding is the only strong signal here.
 _UPPER_BOUND_CAVEAT = (
     "upper bound only — does not reflect Groq's internal per-model daily "
-    "limit, see .claude/rules/groq-compound-free-tier-reliability.md; the "
+    "token limit, which no response header exposes; the "
     "probe call itself succeeding is the only strong signal here"
 )
 

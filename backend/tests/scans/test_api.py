@@ -95,8 +95,8 @@ def test_get_provider_defaults_to_perplexity_when_provider_env_unset(monkeypatch
 def test_get_provider_selects_groq_plus_firecrawl_fallback_from_env_var(monkeypatch):
     # Same composition as scripts/provider_eval.py's build_provider(name="groq+firecrawl"):
     # GroqProvider primary, FirecrawlProvider secondary, wrapped in FallbackProvider.
-    # This is the only combination with a measured found-rate (32-84%, see
-    # .claude/rules/groq-compound-free-tier-reliability.md) -- plain "groq" and
+    # This is the only combination with a measured found-rate (32-84% on the
+    # tuning sample, 64% raw on a fresh hold-out) -- plain "groq" and
     # "perplexity" alone have no such measurement backing them for this app.
     monkeypatch.setenv("PROVIDER", "groq+firecrawl")
     monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")

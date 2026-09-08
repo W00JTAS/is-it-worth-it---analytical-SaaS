@@ -8,9 +8,8 @@ from urllib.parse import urlparse
 from app.providers.base import OfferResult
 
 # Price-comparison / deal-aggregator sites confirmed live (2026-09-08 eval
-# run, .claude/rules/groq-firecrawl-offer-validity-audit.md) to slip past the
-# extraction prompt's explicit "prefer the seller's own page" instruction —
-# in 3/23 found offers, despite that instruction. One of the three (a
+# run) to slip past the extraction prompt's explicit "prefer the seller's
+# own page" instruction — in 3/23 found offers, despite it. One of the three (a
 # skapiec.pl comparison page) carried a price that matched nothing on the
 # actual cited page, i.e. likely fabricated on top of the wrong provenance.
 # A prose instruction is not reliable enough on its own; a hostname check is
@@ -27,9 +26,9 @@ def _is_aggregator_url(url: str) -> bool:
     )
 
 # A grounded search occasionally has the model write a currency symbol
-# instead of an ISO 4217 code (e.g. "zł" for PLN) — evidenced in
-# .claude/rules/groq-firecrawl-offer-validity-audit.md, where it caused
-# real offers to be wrongly excluded downstream by evaluate.py's strict
+# instead of an ISO 4217 code (e.g. "zł" for PLN) — observed in the same
+# eval run, where it caused real offers to be wrongly excluded downstream
+# by evaluate.py's strict
 # `currency != product.currency` comparison. Normalize before that
 # comparison ever sees the value.
 CURRENCY_SYMBOL_ALIASES: dict[str, str] = {

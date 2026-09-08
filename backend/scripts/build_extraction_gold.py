@@ -4,10 +4,9 @@ two prior `provider_eval.py --keep-raw` result files.
 Why this exists: every prompt-tuning measurement in this project so far
 compared runs against a MOVING target — a fresh sample (or a fresh seed) each
 time, with real-world listing changes and Groq's own variance layered on top
-of whatever the prompt change actually did. See
-`.claude/rules/groq-compound-free-tier-reliability.md`'s 2026-09-02 entries:
-"wariancja między przebiegami jest porównywalna do wielkości efektu, który
-próbujemy zmierzyć" — the hold-out (seed=7) run and the tuning sample (seed=42)
+of whatever the prompt change actually did. Run-to-run variance turned out
+comparable to the size of the effect being measured: the hold-out (seed=7) run
+and the tuning sample (seed=42)
 disagreed by 20 points, and three of five "not_found" entries flipped to
 "found" on a mere re-run of the identical prompt.
 

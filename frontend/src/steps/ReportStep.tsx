@@ -260,6 +260,8 @@ export function ReportStep({ scanId }: ReportStepProps) {
 
   // Runs once per scan (not per keystroke in the cost-config card below —
   // that's deliberate, see recalculate() and the "Recalculate" button).
+  // `recalculate` is intentionally omitted: it is re-created every render, so
+  // depending on it would re-fetch the whole report on every keystroke.
   useEffect(() => {
     recalculate()
   }, [scanId])

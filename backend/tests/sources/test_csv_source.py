@@ -56,7 +56,7 @@ def test_external_id_uses_sku_column_when_present():
 
 
 def test_skips_row_with_comma_decimal_zero_price():
-    # Regression for a real 115k-row supplier file (see .claude/rules/money.md)
+    # Regression for a real 115k-row supplier file
     # where ~37k rows carried a "0,00" zero-price marker in Polish
     # comma-decimal form. This is CSV-format-specific: it proves the CSV row
     # (semicolon-delimited, comma-decimal) actually reaches the base's

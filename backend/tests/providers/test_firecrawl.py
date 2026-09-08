@@ -252,8 +252,7 @@ def test_extract_prompt_includes_search_snippet_text():
 
 
 def test_extract_prompt_warns_against_secondary_upsell_prices():
-    # Regression for the price-bleed bug documented in
-    # .claude/rules/groq-compound-free-tier-reliability.md (2026-09-02 entry):
+    # Regression for a price-bleed bug found in a 2026-09-02 live eval run:
     # a genuine single-product-page snippet can still contain a second, much
     # smaller price for an accessory/upsell (e.g. "Kupując ten produkt..."),
     # and the extraction model picked that one instead of the product's own
@@ -279,8 +278,7 @@ def test_extract_prompt_warns_against_secondary_upsell_prices():
 
 
 def test_extract_prompt_warns_against_title_description_variant_mismatch():
-    # Regression for a live eval finding (2026-09-08,
-    # .claude/rules/groq-firecrawl-offer-validity-audit.md): a result titled
+    # Regression for a live eval finding (2026-09-08): a result titled
     # "...unisex różowe" (pink) had a description whose price sentence
     # actually named a different color ("...unisex żółte", yellow) — the
     # existing "drifts partway through into a different product" language
@@ -303,8 +301,7 @@ def test_extract_prompt_warns_against_title_description_variant_mismatch():
 
 
 def test_extract_prompt_carries_the_searched_for_product_name():
-    # Regression for a structural gap found 2026-09-08
-    # (.claude/rules/groq-firecrawl-offer-validity-audit.md): _extract never
+    # Regression for a structural gap found 2026-09-08: _extract never
     # received the product being searched for at all, only raw search
     # snippets — so it had no ground truth to check a candidate result's
     # color/size/pack-quantity against. Two live-confirmed bugs followed: a
@@ -336,8 +333,8 @@ def test_extract_prompt_carries_market_and_deliverability_requirement():
     # the extraction model had no deliverability or market context at all —
     # risking a valid-looking OfferResult for an offer that doesn't actually
     # ship to the target market, or in a currency the caller doesn't expect
-    # (see .claude/rules/money.md's class of bug: a wrong number produced
-    # silently, not an error).
+    # (the worst class of money bug: a wrong number produced silently,
+    # not an error).
     client = _TwoServiceClient(
         search_payload=_search_response([
             {"title": "Example Shop", "description": "Cena: 89.99 zl", "url": "https://example.com/product"},
@@ -374,8 +371,7 @@ def test_extract_prompt_clamps_default_delivery_days_to_max_delivery_days():
 
 
 def test_extract_prompt_rejects_dead_and_unavailable_listings():
-    # Regression for the offer-validity audit in
-    # .claude/rules/groq-firecrawl-offer-validity-audit.md: a live audit of
+    # Regression for the 2026-09-08 offer-validity audit: a live audit of
     # a real scan found confidently-reported offers (confidence >= 0.80) for
     # 404 pages, soft-404 "product not found" pages, discontinued/out-of-
     # stock listings, and a deal-aggregator page rather than the seller's
@@ -403,9 +399,8 @@ def test_extract_prompt_rejects_dead_and_unavailable_listings():
 def test_rejects_offer_when_source_url_is_confirmed_dead():
     # A search snippet can be stale — the page it was indexed from has since
     # gone away — with nothing in the cached text to reveal that, so no
-    # prompt instruction can catch it (see
-    # .claude/rules/groq-firecrawl-offer-validity-audit.md's 2026-09-08
-    # update). A live HEAD check against source_url is the only way.
+    # prompt instruction can catch it (2026-09-08 offer-validity audit).
+    # A live HEAD check against source_url is the only way.
     client = _TwoServiceClient(
         search_payload=_search_response([
             {"title": "Example Shop", "description": "Cena: 89.99 zl", "url": "https://example.com/gone"},

@@ -2,8 +2,7 @@
 reproducible product sample from the real catalog CSV.
 
 This exists because the 2026-08-28 Groq spike (22% success, 23 products) was
-run ad hoc and left no reusable script or fixed sample behind — see
-`.claude/rules/groq-compound-free-tier-reliability.md`. The sample this script
+run ad hoc and left no reusable script or fixed sample behind. The sample this script
 draws is NOT the same 23 products from that spike (they were never recorded);
 it is a new, seeded, on-disk sample so every future run of this script is
 directly comparable to every other one.
@@ -71,10 +70,9 @@ RESULT_FILE_TIMESTAMP_RE = re.compile(r"_(\d+)$")
 
 def load_catalog(csv_path: Path) -> list[Product]:
     """Loads the supplier CSV with an explicit dialect — never csv.Sniffer,
-    see .claude/rules/money.md ("csv.Sniffer cannot be trusted for
-    doublequote"). Rows with wholesale_price "0.00" are dropped: that's the
-    supplier's price-on-request marker, not a real product to look up
-    (same rule file, "'0.00' is a marker, not a price").
+    which cannot be trusted to detect `doublequote` and silently corrupts
+    rows. Rows with wholesale_price "0.00" are dropped: that's the
+    supplier's price-on-request marker, not a real product to look up.
     """
     products: list[Product] = []
     with csv_path.open(encoding="utf-8-sig", newline="") as f:
@@ -459,12 +457,12 @@ def main() -> None:
         # forward.
         "found_rate_cumulative": (found / total) if total else 0.0,
         # Single-run: over ONLY what this run actually queried. This is the
-        # number comparable with the historical baselines in
-        # .claude/rules/groq-compound-free-tier-reliability.md.
+        # number comparable with the historical baselines recorded by
+        # earlier runs of this same script.
         "found_rate_this_run": (found_this_run / queried_this_run) if queried_this_run else None,
         # More meaningful than the raw cumulative rate: error entries are
-        # rate-limit noise unrelated to search quality, see the same rule
-        # file. Cumulative, like found_rate_cumulative.
+        # rate-limit noise unrelated to search quality.
+        # Cumulative, like found_rate_cumulative.
         "found_rate_completed": (found / completed) if completed else None,
     }
 

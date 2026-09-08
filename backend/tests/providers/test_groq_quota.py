@@ -73,11 +73,10 @@ def test_successful_probe_verdict_estimates_remaining_lookups():
     assert line.startswith("OK")
     assert "34" in line  # 69988 // 2000
     # The number is compound-mini's OWN token counter, which does not reflect
-    # the internal orchestration model's daily budget that actually binds
-    # (see .claude/rules/groq-compound-free-tier-reliability.md) — so the
-    # verdict must not read as a prediction of how many lookups will work.
+    # the internal orchestration model's daily budget that actually binds,
+    # so the verdict must not read as a prediction of how many lookups work.
     assert "upper bound only" in line
-    assert "groq-compound-free-tier-reliability.md" in line
+    assert "internal per-model daily" in line
     assert "estimated remaining today" not in line
 
 

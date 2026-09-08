@@ -103,7 +103,7 @@ export function UploadStep({ onFileSelected, onSampleSelected }: UploadStepProps
               <category.icon className="size-5 text-muted-foreground" />
               <span className="font-medium text-foreground">{category.label}</span>
               <span className="text-xs font-normal text-muted-foreground">
-                {loadingSampleId === category.id ? 'Wczytywanie…' : category.description}
+                {loadingSampleId === category.id ? 'Loading…' : category.description}
               </span>
             </Button>
           ))}
