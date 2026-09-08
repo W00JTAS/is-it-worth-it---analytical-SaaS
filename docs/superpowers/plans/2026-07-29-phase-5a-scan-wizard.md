@@ -1,7 +1,5 @@
 # Phase 5a — Scan Wizard Frontend Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Build the three-screen wizard (Upload → Scope+Estimate → Progress) that lets a
 user upload a CSV catalog, choose a scan scope, see a cost/time estimate before spending
 anything, start the scan, and watch live progress to completion — consuming Phase 4's

@@ -260,6 +260,8 @@ export function ReportStep({ scanId }: ReportStepProps) {
 
   // Runs once per scan (not per keystroke in the cost-config card below —
   // that's deliberate, see recalculate() and the "Recalculate" button).
+  // `recalculate` is intentionally omitted: it is re-created every render, so
+  // depending on it would re-fetch the whole report on every keystroke.
   useEffect(() => {
     recalculate()
   }, [scanId])
@@ -367,12 +369,12 @@ export function ReportStep({ scanId }: ReportStepProps) {
           )}
           {summary.counts.currency_mismatch > 0 && (
             <span className="rounded-md bg-muted px-3 py-1 text-xs text-warning">
-              {summary.counts.currency_mismatch} innej waluty
+              {summary.counts.currency_mismatch} in another currency
             </span>
           )}
           {summary.counts.not_checked > 0 && (
             <span className="rounded-md bg-muted px-3 py-1 text-xs text-warning">
-              {summary.counts.not_checked} nie sprawdzono
+              {summary.counts.not_checked} not checked
             </span>
           )}
         </section>
@@ -506,7 +508,7 @@ export function ReportStep({ scanId }: ReportStepProps) {
               Previous
             </Button>
             <span>
-              Strona {productPage.page} z {Math.max(1, Math.ceil(productPage.total / productPage.page_size))}
+              Page {productPage.page} of {Math.max(1, Math.ceil(productPage.total / productPage.page_size))}
             </span>
             <Button
               type="button"

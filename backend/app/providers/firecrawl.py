@@ -76,8 +76,7 @@ def _error_detail(body: dict) -> str:
 class FirecrawlProvider:
     """BYOK provider backed by Firecrawl's Search API for grounding — a
     separate free-tier budget (1000 credits/month, no card) that sits
-    entirely outside Groq's daily token-budget wall documented in
-    .claude/rules/groq-compound-free-tier-reliability.md. Firecrawl's
+    entirely outside Groq's undocumented daily token-budget wall. Firecrawl's
     Search API returns only title/description/url snippets, not structured
     JSON, so a second, separate call to Groq's cheap gpt-oss-20b extraction
     model (same model/response_format GroqProvider._extract uses) turns

@@ -109,8 +109,8 @@ describe('UploadStep sample-trial cards', () => {
     // StrictMode's simulated mount->cleanup->mount leaves the guard
     // permanently tripped even though the component is genuinely mounted --
     // onSampleSelected would never fire and the button would stay on
-    // "Wczytywanie…" forever.
+    // "Loading…" forever.
     await waitFor(() => expect(onSampleSelected).toHaveBeenCalledTimes(1))
-    expect(screen.getByRole('button', { name: /kitchen/i })).not.toHaveTextContent('Wczytywanie')
+    expect(screen.getByRole('button', { name: /kitchen/i })).not.toHaveTextContent('Loading')
   })
 })

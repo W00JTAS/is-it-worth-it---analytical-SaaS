@@ -1,7 +1,5 @@
 # Phase 6b-3 — Mapping + Scope+Estimate restyle — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Restyle `MappingStep` and `ScopeEstimateStep` onto the shadcn/token system, replacing their
 unbounded warning lists with `PaginatedList` (10/page), and fixing the reported unstyled-input/
 low-contrast defects. No change to either screen's logic, validation, or API calls.

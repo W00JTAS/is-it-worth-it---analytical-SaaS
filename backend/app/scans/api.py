@@ -90,9 +90,9 @@ def get_provider() -> PriceProvider:
             # quota-independent, though: FirecrawlProvider._extract shares
             # Groq's own extraction-model budget (gpt-oss-20b), only its
             # SEARCH step avoids Groq entirely. This is the only combination
-            # with a measured found-rate in
-            # .claude/rules/groq-compound-free-tier-reliability.md (32-84%
-            # across several prompt-tuning rounds) -- plain "groq" alone was
+            # with a measured found-rate: 32-84% across several prompt-tuning
+            # rounds on the tuning sample, 64% raw (89% among completed
+            # lookups) on a fresh hold-out sample -- plain "groq" alone was
             # measured at 8-25% before FallbackProvider existed.
             # run_scan() resets the latch at the start of every scan (see
             # engine.py) since this provider is a process-wide singleton
@@ -375,8 +375,7 @@ async def post_scans(
         # Shopify's hard per-query cost cap (rejected by every real store,
         # every plan, before executing), and unlike WooCommerceCatalogSource
         # has no pagination cap or response-shape error handling. Gated here
-        # until it's hardened to the same level -- see the whole-branch
-        # review that found this (repo-reviewer, 2026-08-27).
+        # until it's hardened to the same level.
         raise HTTPException(
             status_code=400,
             detail=(

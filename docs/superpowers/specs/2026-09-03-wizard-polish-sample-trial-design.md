@@ -49,7 +49,7 @@ existing `POST /scans` CSV pipeline unmodified.
 | Sample-trial entry point | `UploadStep` gains a second section below the existing upload form: three cards (Kuchnia i AGD / Zabawki / Elektronika), each a plain bordered `bg-card` block matching the app's existing visual language — no 21st component, see above. Clicking one fetches a pre-bundled static CSV, wraps it in a `File`, and calls a new `onSampleSelected(file, mapping)` prop — skipping `MappingStep` entirely, since the mapping for these files is fixed and known in advance. |
 | Sample data source | The 3 sample CSVs are demo catalogs of 25 rows each under `frontend/public/samples/`. Product identity (`ean`, `nazwa`) is public information about branded goods, so market lookups in the demo resolve against real offers; `SKU`, `kategoria` and `cena` are synthetic — no supplier's wholesale pricing, internal codes or category tree is published here. Header shape is `SKU;ean;nazwa;kategoria;cena`, so the deterministic `ColumnMapping` the frontend hard-codes for these files is exactly `{name: "nazwa", wholesale_price: "cena", ean: "ean", category: "kategoria", sku: "SKU"}`. |
 | Sample-trial scope default | The sample flow lands in `ScopeEstimateStep` with `scopeType` defaulted to **`full`**, not `sample`. Each sample CSV already contains exactly the intended 25 rows, and because rows were pooled from many different literal `kategoria` values (e.g. kitchen's 25 rows span ~20 distinct sub-categories like "Czajniki elektryczne", "Frytownice"), the app's *"Próbka per kategoria"* scope type would mostly-or-fully degenerate to the same 25 rows anyway, for the wrong reason (many 1-2-row "categories", not a deliberate per-category sample). `full` on a 25-row file is simpler, has no edge cases, and is exactly "run a real scan on 25 real products" as asked. Nothing about `ScopeEstimateStep` is locked or hidden for this entry path — the user can still change scope type if they want to. |
-| Provider used for the sample scan | Whatever `PROVIDER` the backend is already configured with (e.g. `groq+firecrawl`, per `.claude/rules/groq-compound-free-tier-reliability.md`) — the sample-trial feature does not add per-request provider selection; it exists to let someone try the *currently configured* pipeline, not to add a new provider-choice UI. |
+| Provider used for the sample scan | Whatever `PROVIDER` the backend is already configured with (e.g. `groq+firecrawl`) — the sample-trial feature does not add per-request provider selection; it exists to let someone try the *currently configured* pipeline, not to add a new provider-choice UI. |
 
 ## `AppShell` title reveal
 
@@ -75,7 +75,7 @@ The middle `grid` wrapper is the standard CSS "animate to auto width" technique:
 transitioning between `0fr` and `1fr` animates smoothly (unlike `width: 0 → auto`, which cannot
 transition), and the inner `overflow-hidden`+`min-w-0` child clips content that hasn't grown into view
 yet. `group-data-[collapsible=icon]:` is the exact bracketed-variant form every other sidebar element
-in this codebase already uses (see `.claude/rules/frontend-ui.md`) — critical to get right, since the
+in this codebase already uses — critical to get right, since the
 bare form (`data-collapsible-icon:`) silently no-ops.
 
 ## `PaginatedList` column support

@@ -8,8 +8,7 @@ Phase 6a shell).
 Phase 6a (`2026-07-30-phase-6a-visual-foundation-shell.md`) shipped the design-token foundation and
 the `AppShell` sidebar shell, deliberately scoped to *not* touch any step screen's markup. The user
 then ran the app for real (their actual ~115k-row supplier catalog) and reported concrete problems,
-confirmed by the controller running the same flow headlessly (screenshots in
-`.superpowers/brainstorm/`, not committed):
+confirmed by running the same flow headlessly (screenshots not committed):
 
 - All 5 step screens (`UploadStep`, `MappingStep`, `ScopeEstimateStep`, `ProgressStep`, `ReportStep`)
   still use their pre-Phase-6a hardcoded `slate-950`/`slate-900`/`slate-800`/`emerald-600`

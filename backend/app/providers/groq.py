@@ -31,8 +31,8 @@ MARKET_COUNTRY_NAMES = {
 # few sentences (price, currency, seller, one URL, delivery estimate) —
 # comfortably under 150 tokens in observed responses — so 600 leaves ample
 # headroom for a verbose multi-sentence answer while still bounding the
-# worst case (a model that rambles) against the scarce daily token budget
-# documented in .claude/rules/groq-compound-free-tier-reliability.md.
+# worst case (a model that rambles) against the scarce daily token budget:
+# an undocumented wall that bites well before the published 250 requests/day.
 SEARCH_MAX_TOKENS = 600
 
 # Token-diet caps for the EXTRACTION call (gpt-oss-20b), shared by both
@@ -49,11 +49,8 @@ SEARCH_MAX_TOKENS = 600
 #      350 cap did NOT truncate a genuine successful answer.
 # EXTRACT_MAX_TOKENS=500 leaves comfortable headroom over the observed
 # 115-198 completion tokens while still bounding a runaway far below the
-# uncapped sample's 1579. Full data at the time of measurement: see
-# .superpowers/sdd/kontynuuj-wczoraj-przerwa-em-prace-dynamic-feather/
-# progress.md's "Controller-run: live token measurement" section — but
-# that SDD workspace is deleted once this plan finishes, so the numbers
-# above are restated in full rather than only pointed to.
+# uncapped sample's 1579. The measurements above are restated here in full
+# rather than pointed at, so the cap can be re-derived from this file alone.
 EXTRACT_MAX_TOKENS = 500
 EXTRACT_REASONING_EFFORT = "low"
 

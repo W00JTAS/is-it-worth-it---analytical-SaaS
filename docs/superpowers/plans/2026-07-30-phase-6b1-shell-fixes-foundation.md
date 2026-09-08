@@ -1,7 +1,5 @@
 # Phase 6b-1 — Shell UX fixes + PaginatedList foundation — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Fix the sidebar's non-functional "auto-hide" (make it genuinely hover-driven), wrap the
 app's content in a themed custom scrollbar, and build a reusable `PaginatedList` component that
 Phase 6b-2 will use to fix Mapping's and Scope+Estimate's unbounded warnings lists.

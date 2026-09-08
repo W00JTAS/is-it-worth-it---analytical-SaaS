@@ -1,7 +1,5 @@
 # Shared CatalogSource Normalization Layer Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Extract the five normalization invariants currently duplicated by hand in
 `CsvCatalogSource` and `ShopifyCatalogSource` (blank-name skip, zero/invalid-price skip, category
 strip+fallback, UPC-A padding + EAN checksum, EAN dedup keeping the cheapest) into a shared
@@ -58,30 +56,25 @@ Append to `backend/tests/normalize/test_ean.py`:
 ```python
 from app.normalize.ean import is_valid_ean, normalize_ean
 
-
 def test_normalize_ean_pads_upc_a_to_ean13():
     ean, warning = normalize_ean("698813001132")
     assert ean == "0698813001132"
     assert warning is None
-
 
 def test_normalize_ean_returns_warning_on_bad_checksum():
     ean, warning = normalize_ean("5901234123458")
     assert ean is None
     assert warning == "invalid EAN checksum '5901234123458', ean cleared"
 
-
 def test_normalize_ean_returns_none_for_blank_input():
     ean, warning = normalize_ean("")
     assert ean is None
     assert warning is None
 
-
 def test_normalize_ean_strips_whitespace():
     ean, warning = normalize_ean("  5901234123457  ")
     assert ean == "5901234123457"
     assert warning is None
-
 
 def test_normalize_ean_passes_through_valid_ean13_unchanged():
     ean, warning = normalize_ean("5901234123457")
@@ -160,7 +153,6 @@ INVALID_EAN = "5901234123458"
 UPC_A = "698813001132"
 PADDED_UPC_A = "0" + UPC_A
 
-
 class FakeSource(BaseCatalogSource):
     SOURCE_NAME = "fake"
 
@@ -170,7 +162,6 @@ class FakeSource(BaseCatalogSource):
 
     def _iter_raw_items(self):
         return iter(self._items)
-
 
 def _item(**overrides) -> RawItem:
     defaults = dict(
@@ -185,7 +176,6 @@ def _item(**overrides) -> RawItem:
     )
     defaults.update(overrides)
     return RawItem(**defaults)
-
 
 def test_maps_valid_item_to_product():
     source = FakeSource([_item()])
@@ -202,13 +192,11 @@ def test_maps_valid_item_to_product():
     assert product.external_id == "2"
     assert product.variant_id is None
 
-
 def test_skips_item_with_missing_name():
     source = FakeSource([_item(name="  ")])
     products = source.fetch_products()
     assert products == []
     assert any(w == "Row 2: missing name, skipped" for w in source.warnings)
-
 
 def test_skips_item_with_invalid_price():
     source = FakeSource([_item(raw_price="not-a-price")])
@@ -216,31 +204,26 @@ def test_skips_item_with_invalid_price():
     assert products == []
     assert any("invalid price" in w for w in source.warnings)
 
-
 def test_skips_item_with_zero_price():
     source = FakeSource([_item(raw_price="0.00")])
     products = source.fetch_products()
     assert products == []
     assert any("zero price" in w for w in source.warnings)
 
-
 def test_missing_category_defaults_to_uncategorized():
     source = FakeSource([_item(raw_category="")])
     products = source.fetch_products()
     assert products[0].category == "Bez kategorii"
-
 
 def test_strips_whitespace_only_category_before_fallback():
     source = FakeSource([_item(raw_category="   ")])
     products = source.fetch_products()
     assert products[0].category == "Bez kategorii"
 
-
 def test_zero_pads_valid_upc_a_barcode_to_ean13():
     source = FakeSource([_item(raw_ean=UPC_A)])
     products = source.fetch_products()
     assert products[0].ean == PADDED_UPC_A
-
 
 def test_clears_ean_with_bad_checksum_but_keeps_item():
     source = FakeSource([_item(raw_ean=INVALID_EAN)])
@@ -248,7 +231,6 @@ def test_clears_ean_with_bad_checksum_but_keeps_item():
     assert len(products) == 1
     assert products[0].ean is None
     assert any("invalid EAN checksum" in w for w in source.warnings)
-
 
 def test_duplicate_ean_keeps_first_when_first_is_cheaper():
     source = FakeSource(
@@ -262,7 +244,6 @@ def test_duplicate_ean_keeps_first_when_first_is_cheaper():
     assert products[0].wholesale_price == Decimal("100.00")
     assert any("duplicate EAN" in w for w in source.warnings)
 
-
 def test_duplicate_ean_replaces_with_cheaper_later_item():
     source = FakeSource(
         [
@@ -274,7 +255,6 @@ def test_duplicate_ean_replaces_with_cheaper_later_item():
     assert len(products) == 1
     assert products[0].wholesale_price == Decimal("100.00")
     assert any("duplicate EAN" in w for w in source.warnings)
-
 
 def test_duplicate_ean_three_items_keeps_cheapest_at_first_position():
     source = FakeSource(
@@ -289,7 +269,6 @@ def test_duplicate_ean_three_items_keeps_cheapest_at_first_position():
     assert products[0].external_id == "2"
     assert products[0].wholesale_price == Decimal("100.00")
     assert sum("duplicate EAN" in w for w in source.warnings) == 2
-
 
 def test_items_without_ean_are_never_deduped():
     source = FakeSource(
@@ -322,12 +301,10 @@ from app.models.product import Product
 from app.normalize.ean import normalize_ean
 from app.normalize.money import InvalidPriceError, parse_price
 
-
 @runtime_checkable
 class CatalogSource(Protocol):
     def fetch_products(self) -> Iterable[Product]:
         ...
-
 
 @dataclass
 class RawItem:
@@ -339,7 +316,6 @@ class RawItem:
     raw_ean: str
     raw_category: str
     currency: str
-
 
 class BaseCatalogSource(ABC):
     SOURCE_NAME: str
@@ -475,10 +451,8 @@ from app.sources.base import BaseCatalogSource, RawItem
 from app.sources.column_mapping import ColumnMapping, detect_column_mapping
 from app.sources.csv_detect import detect_dialect, detect_encoding
 
-
 class EmptyCsvError(Exception):
     pass
-
 
 class CsvCatalogSource(BaseCatalogSource):
     SOURCE_NAME = "csv"
@@ -535,10 +509,8 @@ VALID_EAN = "5901234123457"
 
 HEADER = "Nazwa;Cena hurtowa;EAN;Kategoria\n"
 
-
 def _csv(rows: str) -> bytes:
     return (HEADER + rows).encode("utf-8")
-
 
 def test_parses_valid_row():
     source = CsvCatalogSource(_csv(f"Łóżko;100,00;{VALID_EAN};Meble\n"), tenant_id="t1")
@@ -553,13 +525,11 @@ def test_parses_valid_row():
     assert product.source == "csv"
     assert product.currency == "PLN"
 
-
 def test_parses_cp1250_encoded_file():
     raw = (HEADER + f"Łóżko;100,00;{VALID_EAN};Meble\n").encode("cp1250")
     source = CsvCatalogSource(raw, tenant_id="t1")
     products = source.fetch_products()
     assert products[0].name == "Łóżko"
-
 
 def test_parses_comma_delimited_file():
     raw = f"Nazwa,Cena hurtowa,EAN,Kategoria\nŁóżko,100.00,{VALID_EAN},Meble\n".encode("utf-8")
@@ -567,13 +537,11 @@ def test_parses_comma_delimited_file():
     products = source.fetch_products()
     assert products[0].wholesale_price == Decimal("100.00")
 
-
 def test_external_id_falls_back_to_row_index_without_sku_column():
     source = CsvCatalogSource(_csv(f"Łóżko;100,00;{VALID_EAN};Meble\n"), tenant_id="t1")
     products = source.fetch_products()
     assert len(products) == 1
     assert products[0].external_id == "2"
-
 
 def test_external_id_uses_sku_column_when_present():
     header = "SKU;Nazwa;Cena hurtowa;EAN;Kategoria\n"
@@ -582,7 +550,6 @@ def test_external_id_uses_sku_column_when_present():
     products = source.fetch_products()
     assert len(products) == 1
     assert products[0].external_id == "ABC-123"
-
 
 def test_parses_bom_prefixed_csv_end_to_end():
     # b"\xef\xbb\xbf" is the UTF-8 BOM Excel-on-Windows prepends when exporting
@@ -655,10 +622,8 @@ DEFAULT_API_VERSION = "2026-07"
 
 CURRENCY_QUERY = "{ shop { currencyCode } }"
 
-
 class ShopifyApiError(Exception):
     pass
-
 
 PRODUCTS_QUERY = """
 query($cursor: String) {
@@ -687,7 +652,6 @@ query($cursor: String) {
   }
 }
 """
-
 
 class ShopifyCatalogSource(BaseCatalogSource):
     SOURCE_NAME = "shopify"
@@ -809,7 +773,6 @@ import pytest
 from app.sources.base import CatalogSource
 from app.sources.shopify_source import ShopifyCatalogSource, ShopifyApiError
 
-
 class _FakeResponse:
     def __init__(self, payload: dict):
         self._payload = payload
@@ -819,7 +782,6 @@ class _FakeResponse:
 
     def json(self) -> dict:
         return self._payload
-
 
 class _FakeClient:
     """Returns the currency-query response on the first call, then one
@@ -839,13 +801,11 @@ class _FakeClient:
         page = self._pages.pop(0)
         return _FakeResponse({"data": {"products": page}})
 
-
 def _single_product_page(node: dict, has_next: bool = False, cursor: str | None = None) -> dict:
     return {
         "edges": [{"node": node}],
         "pageInfo": {"hasNextPage": has_next, "endCursor": cursor},
     }
-
 
 def _make_source(client: _FakeClient) -> ShopifyCatalogSource:
     return ShopifyCatalogSource(
@@ -855,11 +815,9 @@ def _make_source(client: _FakeClient) -> ShopifyCatalogSource:
         client=client,
     )
 
-
 def test_implements_catalog_source_protocol():
     source = _make_source(_FakeClient(currency="PLN", pages=[]))
     assert isinstance(source, CatalogSource)
-
 
 def test_maps_single_variant_product():
     client = _FakeClient(
@@ -901,7 +859,6 @@ def test_maps_single_variant_product():
     assert product.wholesale_price == Decimal("49.99")
     assert product.currency == "PLN"
     assert product.category == "Kuchnia"
-
 
 def test_names_non_default_variants_with_variant_title():
     client = _FakeClient(
@@ -945,7 +902,6 @@ def test_names_non_default_variants_with_variant_title():
         "gid://shopify/ProductVariant/20",
         "gid://shopify/ProductVariant/21",
     ]
-
 
 def test_paginates_across_multiple_pages():
     def _page(product_id: str, variant_id: str, has_next: bool, cursor: str | None) -> dict:
@@ -994,7 +950,6 @@ def test_paginates_across_multiple_pages():
     assert client.requests[1]["json"]["variables"]["cursor"] is None
     assert client.requests[2]["json"]["variables"]["cursor"] == "cursor-1"
 
-
 class _RaisingStatusClient:
     """Simulates a non-2xx HTTP response: raise_for_status() raises."""
 
@@ -1012,11 +967,9 @@ class _RaisingStatusClient:
 
         return _Resp()
 
-
 class _GraphQlErrorClient:
     def post(self, url, headers, json):
         return _FakeResponse({"errors": [{"message": "Access denied for currencyCode field."}]})
-
 
 def test_raises_shopify_api_error_on_non_200_response():
     source = ShopifyCatalogSource(
@@ -1029,7 +982,6 @@ def test_raises_shopify_api_error_on_non_200_response():
     with pytest.raises(ShopifyApiError):
         source.fetch_products()
 
-
 def test_raises_shopify_api_error_on_graphql_errors_array():
     source = ShopifyCatalogSource(
         shop_domain="test-shop.myshopify.com",
@@ -1040,7 +992,6 @@ def test_raises_shopify_api_error_on_graphql_errors_array():
 
     with pytest.raises(ShopifyApiError, match="Access denied"):
         source.fetch_products()
-
 
 def test_skips_all_variants_of_product_with_blank_title():
     client = _FakeClient(
@@ -1084,7 +1035,6 @@ def test_skips_all_variants_of_product_with_blank_title():
     assert any("ProductVariant/70" in w for w in source.warnings)
     assert any("ProductVariant/71" in w for w in source.warnings)
 
-
 def test_raises_on_pagination_cursor_not_advancing():
     def _page(has_next: bool, cursor: str | None) -> dict:
         return {
@@ -1127,7 +1077,6 @@ def test_raises_on_pagination_cursor_not_advancing():
     with pytest.raises(ShopifyApiError, match="did not advance"):
         source.fetch_products()
 
-
 class _JsonDecodeErrorClient:
     """Simulates a 200 response whose body isn't valid JSON (e.g. an HTML
     error page)."""
@@ -1142,7 +1091,6 @@ class _JsonDecodeErrorClient:
 
         return _Resp()
 
-
 def test_raises_shopify_api_error_on_non_json_response():
     source = ShopifyCatalogSource(
         shop_domain="test-shop.myshopify.com",
@@ -1154,14 +1102,12 @@ def test_raises_shopify_api_error_on_non_json_response():
     with pytest.raises(ShopifyApiError):
         source.fetch_products()
 
-
 class _MalformedErrorsShapeClient:
     """Simulates a GraphQL response where `errors` is present but not the
     expected list-of-dicts shape."""
 
     def post(self, url, headers, json):
         return _FakeResponse({"errors": "not a list"})
-
 
 def test_raises_shopify_api_error_on_malformed_errors_shape():
     source = ShopifyCatalogSource(
@@ -1201,169 +1147,8 @@ git add backend/app/sources/shopify_source.py backend/tests/sources/test_shopify
 git commit -m "Migrate ShopifyCatalogSource onto BaseCatalogSource"
 ```
 
----
-
-### Task 5: `add-catalog-source` skill + close out the repo-reviewer finding
-
-**Files:**
-- Create: `.claude/skills/add-catalog-source/SKILL.md`
-- Modify: `.claude/agent-memory/repo-reviewer/source-protocol-invariants.md`
-- Modify: `.claude/agent-memory/repo-reviewer/MEMORY.md`
-
-**Interfaces:** none — documentation only, no code.
-
-- [ ] **Step 1: Write the skill**
-
-Create `.claude/skills/add-catalog-source/SKILL.md`:
-
-```markdown
----
-name: add-catalog-source
-description: Use when adding a new CatalogSource implementation (e.g. WooCommerce, Allegro, a second Shopify-like platform) to IS_IT_WORTH_IT. Walks through subclassing BaseCatalogSource so the shared normalization invariants are inherited, never reimplemented.
----
-
-# Add a catalog source
-
-`app/sources/base.py` defines `BaseCatalogSource`, which owns `fetch_products()` end-to-end:
-iterating raw items, normalizing each into a `Product`, and deduping by EAN. A new source
-implements exactly one method — `_iter_raw_items()` — and gets five invariants for free:
-
-1. Blank/missing name → skip, with a warning.
-2. Zero or unparseable price → skip, with a warning (via `app.normalize.money.parse_price`).
-3. Category: stripped, blank → `"Bez kategorii"`.
-4. EAN: 12-digit numeric barcodes zero-padded to EAN-13, then checksum-validated; invalid → the
-   field is cleared with a warning, the row is kept (via `app.normalize.ean.normalize_ean`).
-5. EAN dedup across the whole fetch: on a repeated EAN, the cheaper item wins, with a warning
-   either way.
-
-**Do not reimplement any of these in the new source file.** This is exactly the gap that let the
-Shopify sketch silently diverge before `BaseCatalogSource` existed (see
-`.claude/agent-memory/repo-reviewer/source-protocol-invariants.md`) — a new source's only job is
-mapping its own format into raw strings.
-
-## Steps
-
-1. **Create `app/sources/<name>_source.py`** with:
-
-   ```python
-   from app.sources.base import BaseCatalogSource, RawItem
-
-   class <Name>CatalogSource(BaseCatalogSource):
-       SOURCE_NAME = "<name>"
-
-       def __init__(self, ..., tenant_id: str) -> None:
-           super().__init__(tenant_id)
-           ...
-
-       def _iter_raw_items(self):
-           for raw in ...:  # however this format is fetched/parsed
-               yield RawItem(
-                   label=...,           # identifies this item in warnings, e.g. "Row 5"
-                   external_id=...,
-                   variant_id=...,       # None if the format has no variant concept
-                   name=...,             # raw, unstripped — do not blank-check here
-                   raw_price=...,        # raw string — do not parse or zero-check here
-                   raw_ean=...,          # raw barcode/EAN string — do not pad or validate here
-                   raw_category=...,     # raw, unstripped — do not fallback here
-                   currency=...,
-               )
-   ```
-
-   Pass every field through **raw** — no `.strip()`, no price parsing, no EAN validation, no
-   fallback logic. `BaseCatalogSource._normalize` owns all of that. The only mapping logic that
-   belongs in `_iter_raw_items` is composing values the base class cannot know about — e.g.
-   Shopify's `"{title} - {variant_title}"` variant naming (see `shopify_source.py` for a worked
-   example, including the subtlety of what to do when the base name is itself blank).
-
-2. **Give each `RawItem` a `label`** that identifies the row/item in warning messages. Follow the
-   existing conventions: `"Row {n}"` for a row-oriented format, `"Product {id}, variant {id}"` for
-   one with a product/variant split.
-
-3. **Write format-specific tests only**, in `tests/sources/test_<name>_source.py`. The five shared
-   invariants are already covered by `tests/sources/test_base_source.py` — do not re-test blank
-   name, zero price, category fallback, EAN padding/checksum, or dedup per source. Test what is
-   actually specific to this format: how raw records get parsed/fetched, field mapping
-   correctness, pagination or chunking if applicable, and error handling for malformed responses.
-   `tests/sources/test_csv_source.py` and `tests/sources/test_shopify_source.py` show the expected
-   post-refactor scope.
-
-4. **Wire the new source in** wherever it needs to be reachable (check
-   `app/scans/orchestration.py` for how `CsvCatalogSource` is constructed and dispatched).
-
-5. **Run the `repo-reviewer` subagent** before merging, per this project's whole-branch review
-   convention (`CLAUDE.md`, "Whole-branch review").
-```
-
-- [ ] **Step 2: Update the repo-reviewer memory finding**
-
-In `.claude/agent-memory/repo-reviewer/source-protocol-invariants.md`, replace the `## Stale when`
-section (the last section of the file) with:
-
-```markdown
-## Stale when
-
-**RESOLVED as of 2026-08-26.** `CatalogSource` is no longer a bare one-method `Protocol` that each
-source reimplements against — `app/sources/base.py` now has `BaseCatalogSource`, a template-method
-ABC that owns `fetch_products()` (normalization + dedup) entirely. Both `CsvCatalogSource` and
-`ShopifyCatalogSource` implement only `_iter_raw_items()`; a new source (e.g. WooCommerce) cannot
-omit any of the five invariants because it never gets to write the loop. The `add-catalog-source`
-skill (`.claude/skills/add-catalog-source/SKILL.md`) walks through adding one correctly.
-
-The detector below is no longer the right check for a *new* source — check whether it subclasses
-`BaseCatalogSource` and implements nothing beyond `_iter_raw_items` instead. It remains useful only
-as a regression check that `csv_source.py`/`shopify_source.py` haven't grown normalization logic
-back:
-
-```
-grep -n 'strip()\|is_valid_ean\|len(raw\|seen_eans\|Bez kategorii' \
-  backend/app/sources/csv_source.py backend/app/sources/shopify_source.py
-```
-
-Every match should be inside `BaseCatalogSource` in `base.py`, never in these two files.
-
-Related: [[backend-data]], [[review-process]], [[backend-http-clients]].
-```
-
-- [ ] **Step 3: Update the MEMORY.md index line**
-
-In `.claude/agent-memory/repo-reviewer/MEMORY.md`, replace:
-
-```
-- [CatalogSource's unwritten contract](source-protocol-invariants.md) — a 2nd source passes `isinstance()` + all tests while dropping dedup, UPC padding, name skip, category strip
-```
-
-with:
-
-```
-- [CatalogSource's unwritten contract — RESOLVED](source-protocol-invariants.md) — BaseCatalogSource now owns normalization+dedup; a 2nd source could no longer silently drop them
-```
-
-- [ ] **Step 4: Run the full backend suite one last time**
-
-Run: `cd backend && .venv/bin/pytest -v`
-Expected: all PASS.
-
-- [ ] **Step 5: Verify the Definition of Done's grep check**
-
-Run:
-```bash
-cd backend && grep -n 'strip()\|is_valid_ean\|len(raw\|seen_eans\|Bez kategorii' app/sources/csv_source.py app/sources/shopify_source.py
-```
-Expected: no output (empty).
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add .claude/skills/add-catalog-source/SKILL.md \
-  .claude/agent-memory/repo-reviewer/source-protocol-invariants.md \
-  .claude/agent-memory/repo-reviewer/MEMORY.md
-git commit -m "Add add-catalog-source skill; close out source-protocol-invariants finding"
-```
-
----
-
 ## After all tasks: whole-branch review
 
-Per this project's `CLAUDE.md`, run the `repo-reviewer` subagent before merging this branch/phase —
-per-task reviews passing is not sufficient here (`.claude/rules/planning.md`: Phase 5c shipped a
-missing guard despite 7 clean per-task reviews).
+Per this project's `CLAUDE.md`, review the whole branch before merging it — per-task reviews
+passing is not sufficient here: an earlier phase shipped a missing guard despite 7 clean per-task
+reviews.

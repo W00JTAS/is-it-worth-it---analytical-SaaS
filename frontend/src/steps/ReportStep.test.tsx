@@ -42,8 +42,10 @@ describe('ReportStep', () => {
 
     expect(await screen.findByText('1 without an offer')).toBeInTheDocument()
     expect(screen.getByText('1 flagged')).toBeInTheDocument()
-    expect(screen.queryByText(/innej waluty/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/nie sprawdzono/)).not.toBeInTheDocument()
+    // Anchored on the leading count so these cannot pass by accident: the product
+    // table below renders a "Not checked" status of its own for individual rows.
+    expect(screen.queryByText(/^\d+ in another currency$/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^\d+ not checked$/)).not.toBeInTheDocument()
   })
 
   it('shows the scenario matrix and category table', async () => {

@@ -120,6 +120,8 @@ describe('ProgressStep', () => {
 
     const pausedMessage = screen.getByText(/scan paused/i)
     expect(pausedMessage).toBeInTheDocument()
+    // The count is the actionable part of the message: 20 - 12 products never ran.
+    expect(pausedMessage).toHaveTextContent('8 of 20 products unchecked')
     expect(pausedMessage.className).toContain('text-warning')
     expect(pausedMessage.className).not.toContain('text-destructive')
     expect(pausedMessage.className).not.toContain('text-success')

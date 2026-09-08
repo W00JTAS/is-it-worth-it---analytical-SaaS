@@ -12,6 +12,26 @@ Shopify source exists but is currently gated off pending a cost-aware rewrite (i
 query exceeds Shopify's per-request cost cap). Dedicated Shopify/WooCommerce *apps* (not
 just catalog sources) are a future direction, not yet started.
 
+## Try it without an API key
+
+Three demo catalogs (25 products each — kitchen, toys, electronics) ship with the app and are
+one click away on the upload screen, so the whole wizard — mapping, scope, cost estimate, report
+layout — can be walked through with no key and no CSV of your own. Only the price-discovery step
+itself calls a paid API.
+
+```bash
+cd backend && .venv/bin/uvicorn app.main:app --port 8000   # terminal 1
+cd frontend && npm install && npm run dev                  # terminal 2
+```
+
+Then open `http://localhost:5173` and pick one of the demo catalogs.
+
+![The upload screen, with the three demo catalogs](docs/images/upload.png)
+
+On the free Groq tier a 25-product scan usually exhausts the daily budget partway
+through; the scan then pauses, says how many products it left unchecked, and can be
+resumed later — everything already looked up is cached and is not paid for twice.
+
 ## How it works
 
 ```
@@ -24,9 +44,19 @@ Upload → Mapping → Scope + Estimate → Progress → Report
 3. **Scope + Estimate** — choose a full scan or a per-category sample, see the exact query
    count and USD cost *before* anything runs.
 4. **Progress** — live progress while the price-discovery job runs.
+
+![Scan scope with the cost estimate and the cache overlap](docs/images/estimate.png)
+
 5. **Report** — the verdict: average margin at the current price, a scenario matrix
    (−10%/−5%/0%/+5% around the market price), a per-category breakdown, and a paginated,
    filterable product drill-down with every offer's source link.
+
+![The report: the verdict, editable cost assumptions, and the scenario matrix](docs/images/report.png)
+
+The verdict above is a real run on the kitchen demo catalog: at the market price this catalog
+loses 3.3% per product on average, and only 6 of 15 checked products make money at all. That is
+the question the tool exists to answer, and "no" is a perfectly good answer to get before buying
+stock.
 
 Full design rationale lives in `docs/superpowers/specs/2026-07-28-is-it-worth-it-design.md`.
 
@@ -45,11 +75,30 @@ CatalogSource → Normalize → Scope+Estimate → Price Discovery → Margin En
   (default, paid), Groq's free tier alone (`compound-mini` + `gpt-oss-20b`, two-call
   search-then-extract), or `groq+firecrawl` (Groq primary, falls back to Firecrawl once Groq's
   search step rate-limits — the two don't fully avoid sharing quota, since Firecrawl's own
-  extraction step still calls Groq's extraction model — see `.claude/rules/groq-compound-free-tier-reliability.md` for measured
-  found-rates; free tier is demo-scale only, not sized for a full catalog scan). A SQLite cache
+  extraction step still calls Groq's extraction model). Measured found-rates are in
+  [Measured provider quality](#measured-provider-quality) below; the free tier is demo-scale
+  only, not sized for a full catalog scan. A SQLite cache
   keyed on `(ean, market, provider, max_delivery_days)` means you never pay twice for the same
   lookup, shared across whichever provider is active.
 - **Money** — always `Decimal`, never `float`, end to end.
+
+## Measured provider quality
+
+Found-rate is the share of catalog products for which a provider returns a usable market offer.
+It was measured on two fixed, seeded 25-product samples drawn from a real 115k-row supplier
+catalog, with the raw responses stored so prompt changes could be replayed without re-querying:
+
+| Provider | Sample | Found | Not found | Error (rate-limit) | Found-rate |
+|---|---|---|---|---|---|
+| `groq` alone | various | — | — | high | 8–32% |
+| `groq+firecrawl` | tuning (seed=42) | 21 | 2 | 2 | **84%** |
+| `groq+firecrawl` | hold-out (seed=7) | 16 | 2 | 7 | **64%** raw, 89% of completed |
+
+The 20-point gap between the tuning sample and a fresh hold-out is the honest headline: prompt
+tuning measured only on the sample it was tuned against overstated quality, and the hold-out run
+is what the number should be read as. Run-to-run variance is comparable to the size of the effect
+a prompt change produces, which is why `backend/scripts/provider_eval.py` fixes the sample on disk
+and `replay_extract.py` re-runs extraction against stored search text at zero search cost.
 
 ## Setup
 
@@ -83,7 +132,7 @@ PERPLEXITY_API_KEY=your-perplexity-key-here  # (default provider)
 # PROVIDER=perplexity      # default
 # PROVIDER=groq            # requires GROQ_API_KEY
 # PROVIDER=groq+firecrawl  # requires GROQ_API_KEY and FIRECRAWL_API_KEY; free-tier demo mode,
-#                          # not sized for a full catalog scan (see the rule file above)
+#                          # not sized for a full catalog scan
 ```
 
 Run the API:
@@ -125,10 +174,15 @@ vars set, so a normal `pytest` run stays free.
 
 ## Project status
 
-Phases 0 through 5c are complete: CSV ingestion, margin engine, price discovery with
-pluggable providers (Perplexity, Groq) and caching, the async scan job engine, and the full
-wizard UI including the Report and column-mapping screens described above. WooCommerce
-catalog ingestion is implemented; Shopify catalog ingestion exists but is gated pending a
-cost-aware rewrite. Not yet built: Allegro/open-web-SERP as additional price sources
-(deferred until real-world data justifies them). See `docs/superpowers/specs/` and
-`docs/superpowers/plans/` for the phase-by-phase design and implementation history.
+Working end to end: CSV ingestion (plus a WooCommerce catalog source), column mapping with
+auto-detection, scope selection with an up-front query-count and cost estimate, the async scan
+job engine with live progress, price discovery across three provider configurations with a
+SQLite cache, the margin engine, and the full report — verdict, scenario matrix, per-category
+breakdown and product drill-down. Demo catalogs make all of it runnable without an API key.
+
+Gated off: the Shopify catalog source, pending a cost-aware rewrite of its GraphQL query (which
+exceeds Shopify's per-request cost cap). Not started: Allegro and open-web SERP as additional
+price sources, deferred until real-world data justifies them; dedicated Shopify/WooCommerce apps.
+
+Design documents and the implementation history for each phase are in `docs/superpowers/specs/`
+and `docs/superpowers/plans/`.

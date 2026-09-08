@@ -1,7 +1,5 @@
 # Phase 6b-2 — Upload + Progress screen restyle — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Restyle `UploadStep` and `ProgressStep` — the two smallest, simplest screens — onto the
 Phase 6a/6b-1 token system and shadcn components, fixing the near-invisible light-mode text and
 unstyled native inputs/buttons the user reported.

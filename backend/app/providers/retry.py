@@ -88,7 +88,7 @@ def _parse_retry_after_from_body(response: httpx.Response) -> float | None:
     """Groq does not set the Retry-After header on 429s — the suggested wait
     (e.g. "Please try again in 14.06s" or "...in 45m0s") is only in the JSON
     error body's `error.message`. Parsing vendor prose is inherently fragile
-    (see .claude/rules/groq-compound-free-tier-reliability.md), so this is
+    — the wording is undocumented and can change without notice — so this is
     deliberately best-effort: any parse failure just falls back to the
     existing exponential backoff, same as before this existed.
     """

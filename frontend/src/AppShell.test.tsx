@@ -166,6 +166,10 @@ describe('AppShell', () => {
     const inner = screen.getByText('IS')
     const header = inner.parentElement
     expect(header?.tagName.toLowerCase()).toBe('span')
-    expect(header!.textContent).toBe('IS IT WORTH IT?')
+    // The gap after "IS" is a non-breaking space on purpose — a plain space is a
+    // leading space in the animated span's own line box and gets stripped at paint
+    // time, which is invisible to a textContent check that normalizes nothing.
+    expect(header!.textContent).toBe('IS\u00a0IT WORTH IT?')
+    expect(header!.textContent).not.toContain('ISIT')
   })
 })

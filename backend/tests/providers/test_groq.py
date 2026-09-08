@@ -266,8 +266,7 @@ def test_extract_model_constructor_override_is_used_in_extract_call():
 
 
 def test_extract_prompt_rejects_dead_and_unavailable_listings():
-    # Regression for the offer-validity audit in
-    # .claude/rules/groq-firecrawl-offer-validity-audit.md: a real scan's
+    # Regression for the 2026-09-08 offer-validity audit: a real scan's
     # extraction confidently reported offers for 404 pages, soft-404 "product
     # not found" pages, and discontinued/out-of-stock listings, all with
     # confidence >= 0.80. GroqProvider is FallbackProvider's primary, so if
@@ -291,9 +290,8 @@ def test_extract_prompt_rejects_dead_and_unavailable_listings():
 def test_rejects_offer_when_source_url_is_confirmed_dead():
     # A search snippet can be stale — the page it was indexed from has since
     # gone away — with nothing in the cached text to reveal that, so no
-    # prompt instruction can catch it (see
-    # .claude/rules/groq-firecrawl-offer-validity-audit.md's 2026-09-08
-    # update). A live HEAD check against source_url is the only way.
+    # prompt instruction can catch it (2026-09-08 offer-validity audit).
+    # A live HEAD check against source_url is the only way.
     client = _TwoCallClient(
         search_payload=_search_response(
             "The cheapest offer is 89.99 PLN at Example Shop.",

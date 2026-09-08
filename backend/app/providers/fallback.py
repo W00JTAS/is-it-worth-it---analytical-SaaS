@@ -27,8 +27,7 @@ class FallbackProvider:
     FirecrawlProvider._extract calls the same Groq extraction model
     (gpt-oss-20b) GroqProvider._extract does, so the two sub-providers share
     that model's daily token budget even though only `primary`'s SEARCH step
-    (compound-mini) is genuinely independent. See
-    .claude/rules/groq-compound-free-tier-reliability.md's fifth update.
+    (compound-mini) is genuinely independent.
 
     One stateful exception to "try primary first": a ProviderRateLimited from
     primary latches it off for this instance — see find_cheapest for why —
@@ -110,9 +109,9 @@ class FallbackProvider:
         except ProviderRateLimited:
             # A rate limit that survived retry.py's backoff is not a
             # per-product hiccup — it means primary's budget is gone (for
-            # Groq, the undocumented daily token wall in
-            # .claude/rules/groq-compound-free-tier-reliability.md, which
-            # does not reopen within a run). Latch primary off for the rest
+            # Groq, an undocumented daily token wall that sits well below
+            # the documented 250 requests/day and does not reopen within a
+            # run). Latch primary off for the rest
             # of this instance's life instead of paying the full retry
             # backoff again on every remaining product.
             #

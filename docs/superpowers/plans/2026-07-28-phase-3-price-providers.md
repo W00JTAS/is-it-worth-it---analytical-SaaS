@@ -1,7 +1,5 @@
 # Phase 3 — Price Provider Layer Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Build the price-discovery layer: a `PriceProvider` protocol, a Perplexity Sonar
 implementation with structured JSON output, an SQLite result cache, and anomaly detection —
 so that, given a `Product`, the system can find the cheapest real market offer meeting a
@@ -88,7 +86,6 @@ from decimal import Decimal
 
 from app.providers.base import OfferResult
 
-
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
         price=Decimal("99.99"),
@@ -103,7 +100,6 @@ def _make_offer(**overrides) -> OfferResult:
     defaults.update(overrides)
     return OfferResult(**defaults)
 
-
 def test_offer_result_holds_all_contract_fields():
     offer = _make_offer()
     assert offer.price == Decimal("99.99")
@@ -114,7 +110,6 @@ def test_offer_result_holds_all_contract_fields():
     assert offer.confidence == 0.9
     assert offer.citations == ("https://example.com/product",)
     assert offer.raw_response == '{"raw": true}'
-
 
 def test_offer_result_is_frozen():
     offer = _make_offer()
@@ -143,7 +138,6 @@ from typing import Protocol
 
 from app.models.product import Product
 
-
 @dataclass(frozen=True)
 class OfferResult:
     price: Decimal
@@ -154,7 +148,6 @@ class OfferResult:
     confidence: float
     citations: tuple[str, ...]
     raw_response: str
-
 
 class PriceProvider(Protocol):
     name: str
@@ -204,7 +197,6 @@ from decimal import Decimal
 from app.providers.anomaly import AnomalyFlag, detect_anomaly
 from app.providers.base import OfferResult
 
-
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
         price=Decimal("100.00"),
@@ -219,21 +211,17 @@ def _make_offer(**overrides) -> OfferResult:
     defaults.update(overrides)
     return OfferResult(**defaults)
 
-
 def test_no_anomaly_for_reasonable_offer():
     offer = _make_offer(price=Decimal("100.00"), confidence=0.9)
     assert detect_anomaly(offer, wholesale_price=Decimal("60.00")) is None
-
 
 def test_flags_price_below_wholesale():
     offer = _make_offer(price=Decimal("50.00"), confidence=0.9)
     assert detect_anomaly(offer, wholesale_price=Decimal("60.00")) == AnomalyFlag.BELOW_WHOLESALE
 
-
 def test_flags_unusually_high_price():
     offer = _make_offer(price=Decimal("1000.00"), confidence=0.9)
     assert detect_anomaly(offer, wholesale_price=Decimal("60.00")) == AnomalyFlag.UNUSUALLY_HIGH
-
 
 def test_flags_low_confidence_before_price_checks():
     offer = _make_offer(price=Decimal("50.00"), confidence=0.2)
@@ -259,12 +247,10 @@ from app.providers.base import OfferResult
 LOW_CONFIDENCE_THRESHOLD = 0.5
 HIGH_PRICE_MULTIPLIER = Decimal("10")
 
-
 class AnomalyFlag(str, Enum):
     BELOW_WHOLESALE = "below_wholesale"
     UNUSUALLY_HIGH = "unusually_high"
     LOW_CONFIDENCE = "low_confidence"
-
 
 def detect_anomaly(offer: OfferResult, wholesale_price: Decimal) -> AnomalyFlag | None:
     if offer.confidence < LOW_CONFIDENCE_THRESHOLD:
@@ -316,7 +302,6 @@ from decimal import Decimal
 from app.cache.sqlite_cache import PriceCache
 from app.providers.base import OfferResult
 
-
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
         price=Decimal("99.99"),
@@ -331,12 +316,10 @@ def _make_offer(**overrides) -> OfferResult:
     defaults.update(overrides)
     return OfferResult(**defaults)
 
-
 def test_miss_on_empty_cache(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
     assert cache.get("5901234123457", "PL", "perplexity", 5) is None
     cache.close()
-
 
 def test_round_trips_a_hit(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
@@ -350,7 +333,6 @@ def test_round_trips_a_hit(tmp_path):
     assert entry.offer == offer
     cache.close()
 
-
 def test_caches_a_negative_result(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
     cache.set("5901234123457", "PL", "perplexity", 5, None)
@@ -362,7 +344,6 @@ def test_caches_a_negative_result(tmp_path):
     assert entry.offer is None
     cache.close()
 
-
 def test_different_cache_key_dimensions_are_isolated(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
     offer = _make_offer()
@@ -372,7 +353,6 @@ def test_different_cache_key_dimensions_are_isolated(tmp_path):
     assert cache.get("5901234123457", "DE", "perplexity", 5) is None
     assert cache.get("0000000000017", "PL", "perplexity", 5) is None
     cache.close()
-
 
 def test_expired_entry_is_treated_as_a_miss(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3", ttl_seconds=1)
@@ -410,13 +390,11 @@ from app.providers.base import OfferResult
 
 DEFAULT_TTL_SECONDS = 30 * 24 * 3600
 
-
 @dataclass(frozen=True)
 class CacheEntry:
     found: bool
     offer: OfferResult | None
     cached_at: float
-
 
 class PriceCache:
     def __init__(self, db_path: str | Path, ttl_seconds: int = DEFAULT_TTL_SECONDS):
@@ -572,7 +550,6 @@ import pytest
 from app.models.product import Product
 from app.providers.perplexity import PerplexityProvider
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1", source="csv", external_id="1", variant_id=None,
@@ -581,7 +558,6 @@ def _make_product(**overrides) -> Product:
     )
     defaults.update(overrides)
     return Product(**defaults)
-
 
 class _FakeResponse:
     def __init__(self, payload: dict):
@@ -592,7 +568,6 @@ class _FakeResponse:
 
     def json(self) -> dict:
         return self._payload
-
 
 class _FakeClient:
     def __init__(self, content: dict | None, citations: list[str] | None = None):
@@ -608,7 +583,6 @@ class _FakeClient:
                 "citations": self._citations,
             }
         )
-
 
 def test_returns_offer_for_a_valid_found_response():
     client = _FakeClient(
@@ -637,7 +611,6 @@ def test_returns_offer_for_a_valid_found_response():
     assert offer.citations == ("https://example.com/product",)
     assert json.loads(offer.raw_response)["citations"] == ["https://example.com/product"]
 
-
 def test_sends_bearer_auth_and_json_schema_response_format():
     client = _FakeClient(content={"found": False})
     provider = PerplexityProvider(api_key="secret-key", client=client)
@@ -648,7 +621,6 @@ def test_sends_bearer_auth_and_json_schema_response_format():
     assert client.last_request["json"]["response_format"]["type"] == "json_schema"
     assert client.last_request["json"]["model"] == "sonar"
 
-
 def test_returns_none_when_not_found():
     client = _FakeClient(content={"found": False})
     provider = PerplexityProvider(api_key="test-key", client=client)
@@ -656,7 +628,6 @@ def test_returns_none_when_not_found():
     offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
 
     assert offer is None
-
 
 def test_returns_none_when_source_url_missing():
     client = _FakeClient(
@@ -671,7 +642,6 @@ def test_returns_none_when_source_url_missing():
 
     assert offer is None
 
-
 def test_returns_none_when_delivery_exceeds_limit():
     client = _FakeClient(
         content={
@@ -684,7 +654,6 @@ def test_returns_none_when_delivery_exceeds_limit():
     offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
 
     assert offer is None
-
 
 def test_returns_none_on_malformed_content():
     client = _FakeClient(content=None)  # json.dumps(None) -> "null" -> parses to None, not a dict
@@ -734,7 +703,6 @@ RESPONSE_SCHEMA: dict[str, Any] = {
         "source_url", "delivery_days", "confidence",
     ],
 }
-
 
 class PerplexityProvider:
     name = "perplexity"
@@ -861,7 +829,6 @@ from app.models.product import Product
 from app.providers.base import OfferResult
 from app.providers.lookup import get_offer_cached
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1", source="csv", external_id="1", variant_id=None,
@@ -870,7 +837,6 @@ def _make_product(**overrides) -> Product:
     )
     defaults.update(overrides)
     return Product(**defaults)
-
 
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
@@ -882,7 +848,6 @@ def _make_offer(**overrides) -> OfferResult:
     defaults.update(overrides)
     return OfferResult(**defaults)
 
-
 class _CountingProvider:
     name = "perplexity"
 
@@ -893,7 +858,6 @@ class _CountingProvider:
     def find_cheapest(self, product, market, max_delivery_days):
         self.call_count += 1
         return self._result
-
 
 def test_calls_provider_and_caches_on_miss(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
@@ -911,7 +875,6 @@ def test_calls_provider_and_caches_on_miss(tmp_path):
     assert cached.offer == offer
     cache.close()
 
-
 def test_second_lookup_hits_cache_not_provider(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
     provider = _CountingProvider(_make_offer())
@@ -923,7 +886,6 @@ def test_second_lookup_hits_cache_not_provider(tmp_path):
     assert result == _make_offer()
     assert provider.call_count == 1  # second call was a cache hit
     cache.close()
-
 
 def test_negative_result_is_cached_too(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
@@ -937,7 +899,6 @@ def test_negative_result_is_cached_too(tmp_path):
     assert second is None
     assert provider.call_count == 1  # second call was a cached negative
     cache.close()
-
 
 def test_product_without_ean_always_calls_provider(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
@@ -965,7 +926,6 @@ from __future__ import annotations
 from app.cache.sqlite_cache import PriceCache
 from app.models.product import Product
 from app.providers.base import OfferResult, PriceProvider
-
 
 def get_offer_cached(
     product: Product,
@@ -1031,7 +991,6 @@ pytestmark = pytest.mark.skipif(
     reason="PERPLEXITY_API_KEY not set — export it to run this opt-in, cost-incurring smoke test",
 )
 
-
 def test_find_cheapest_returns_a_contract_valid_result_or_none():
     provider = PerplexityProvider(api_key=os.environ["PERPLEXITY_API_KEY"])
     product = Product(
@@ -1084,8 +1043,8 @@ git commit -m "Add opt-in real-API smoke test for PerplexityProvider"
   (negative-result caching is what makes the "never pay twice" guarantee hold on repeat scans).
   Deliberately **not** covered here (belongs to later phases per the spec's own phase ordering):
   cost/time estimation shown before a scan starts (Phase 4, needs the job engine's product count),
-  sampling mode (Phase 4/5), `.claude/rules/` and `.claude/skills/` for providers (spec phase 7,
-  meta-step, written last once the real contract has been built and battle-tested).
+  sampling mode (Phase 4/5), and the written-down provider conventions (spec phase 7, a meta-step
+  written last, once the real contract has been built and battle-tested).
 - **Placeholder scan:** none — every step has real code.
 - **Type consistency:** `OfferResult` fields (Task 1) are used identically in `anomaly.py` (Task 2),
   `sqlite_cache.py` (Task 3), `perplexity.py` (Task 4), and `lookup.py` (Task 5). `PriceProvider.name`

@@ -1,7 +1,5 @@
 # Phase 0–2 Foundations Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Build the API-cost-free foundation of IS_IT_WORTH_IT: project scaffold, CSV catalog ingestion with normalization, and the margin calculation engine — all fully tested before a single Perplexity API call is ever made.
 
 **Architecture:** Backend is a Python/FastAPI package (`backend/app/`) organized by responsibility (`models`, `sources`, `normalize`, `pricing`), each module small and independently testable. Frontend is a separate Vite/React/TS/Tailwind app (`frontend/`), scaffolded but not wired to backend logic yet — that's Phase 5. This plan covers Phase 0 (scaffold), Phase 1 (`CatalogSource` + normalize), and Phase 2 (margin engine) from the approved design spec.
@@ -77,7 +75,6 @@ from app.main import app
 
 client = TestClient(app)
 
-
 def test_health_check_returns_ok():
     response = client.get("/health")
     assert response.status_code == 200
@@ -95,7 +92,6 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'app.main'`
 from fastapi import FastAPI
 
 app = FastAPI(title="IS_IT_WORTH_IT")
-
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
@@ -239,7 +235,6 @@ import pytest
 
 from app.models.product import Product
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1",
@@ -255,12 +250,10 @@ def _make_product(**overrides) -> Product:
     defaults.update(overrides)
     return Product(**defaults)
 
-
 def test_product_holds_expected_fields():
     product = _make_product()
     assert product.name == "Test Product"
     assert product.wholesale_price == Decimal("10.00")
-
 
 def test_product_is_immutable():
     product = _make_product()
@@ -280,7 +273,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-
 
 @dataclass(frozen=True)
 class Product:
@@ -308,7 +300,6 @@ from decimal import Decimal
 from app.models.product import Product
 from app.sources.base import CatalogSource
 
-
 class DummySource:
     def fetch_products(self):
         return [
@@ -325,14 +316,11 @@ class DummySource:
             )
         ]
 
-
 class NotASource:
     pass
 
-
 def test_dummy_source_conforms_to_catalog_source_protocol():
     assert isinstance(DummySource(), CatalogSource)
-
 
 def test_class_without_fetch_products_does_not_conform():
     assert not isinstance(NotASource(), CatalogSource)
@@ -351,7 +339,6 @@ from __future__ import annotations
 from typing import Iterable, Protocol, runtime_checkable
 
 from app.models.product import Product
-
 
 @runtime_checkable
 class CatalogSource(Protocol):
@@ -398,26 +385,20 @@ touch backend/app/normalize/__init__.py backend/tests/normalize/__init__.py
 ```python
 from app.normalize.ean import is_valid_ean
 
-
 def test_valid_ean13_checksum():
     assert is_valid_ean("5901234123457") is True
-
 
 def test_invalid_ean13_checksum():
     assert is_valid_ean("5901234123458") is False
 
-
 def test_valid_ean8_checksum():
     assert is_valid_ean("40170725") is True
-
 
 def test_invalid_ean8_checksum():
     assert is_valid_ean("40170724") is False
 
-
 def test_non_digit_string_is_invalid():
     assert is_valid_ean("abcdefghijklm") is False
-
 
 def test_wrong_length_is_invalid():
     assert is_valid_ean("123") is False
@@ -432,7 +413,6 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'app.normalize.ean'`
 
 ```python
 from __future__ import annotations
-
 
 def is_valid_ean(code: str) -> bool:
     if not code.isdigit():
@@ -488,7 +468,6 @@ import pytest
 
 from app.normalize.money import InvalidPriceError, parse_price
 
-
 @pytest.mark.parametrize(
     "raw, expected",
     [
@@ -501,7 +480,6 @@ from app.normalize.money import InvalidPriceError, parse_price
 )
 def test_parse_price_valid_inputs(raw, expected):
     assert parse_price(raw) == expected
-
 
 @pytest.mark.parametrize("raw", ["", "abc", "-5,00"])
 def test_parse_price_rejects_invalid_inputs(raw):
@@ -524,10 +502,8 @@ from decimal import Decimal, InvalidOperation
 
 _STRIP_PATTERN = re.compile(r"[^\d,.\-]")
 
-
 class InvalidPriceError(Exception):
     pass
-
 
 def parse_price(raw: str) -> Decimal:
     cleaned = _STRIP_PATTERN.sub("", raw.strip())
@@ -594,18 +570,15 @@ import pytest
 
 from app.sources.column_mapping import ColumnMapping, ColumnMappingError, detect_column_mapping
 
-
 def test_detects_polish_headers():
     mapping = detect_column_mapping(["Nazwa", "Cena hurtowa", "EAN", "Kategoria"])
     assert mapping == ColumnMapping(
         name="Nazwa", wholesale_price="Cena hurtowa", ean="EAN", category="Kategoria"
     )
 
-
 def test_detects_english_headers_case_insensitively():
     mapping = detect_column_mapping(["name", "price", "ean", "category"])
     assert mapping == ColumnMapping(name="name", wholesale_price="price", ean="ean", category="category")
-
 
 def test_raises_when_a_column_cannot_be_mapped():
     with pytest.raises(ColumnMappingError):
@@ -629,10 +602,8 @@ PRICE_ALIASES = {"cena", "cena hurtowa", "price", "wholesale price", "cena netto
 EAN_ALIASES = {"ean", "kod ean", "barcode", "kod kreskowy", "gtin"}
 CATEGORY_ALIASES = {"kategoria", "category", "grupa", "grupa produktowa"}
 
-
 class ColumnMappingError(Exception):
     pass
-
 
 @dataclass(frozen=True)
 class ColumnMapping:
@@ -640,7 +611,6 @@ class ColumnMapping:
     wholesale_price: str
     ean: str
     category: str
-
 
 def detect_column_mapping(header: list[str]) -> ColumnMapping:
     normalized = {h.strip().lower(): h for h in header}
@@ -693,25 +663,20 @@ from app.sources.csv_detect import detect_dialect, detect_encoding
 
 SAMPLE_TEXT = "Nazwa;Cena;EAN;Kategoria\nŁóżko;100,00;5901234123457;Meble\n"
 
-
 def test_detects_utf8_encoding():
     assert detect_encoding(SAMPLE_TEXT.encode("utf-8")) == "utf-8"
 
-
 def test_falls_back_to_cp1250_when_utf8_decode_fails():
     assert detect_encoding(SAMPLE_TEXT.encode("cp1250")) == "cp1250"
-
 
 def test_detects_semicolon_delimiter():
     dialect = detect_dialect(SAMPLE_TEXT)
     assert dialect.delimiter == ";"
 
-
 def test_detects_comma_delimiter():
     comma_text = "Nazwa,Cena,EAN,Kategoria\nŁóżko,100.00,5901234123457,Meble\n"
     dialect = detect_dialect(comma_text)
     assert dialect.delimiter == ","
-
 
 def test_falls_back_to_semicolon_when_sniffing_fails():
     dialect = detect_dialect("no delimiter characters at all")
@@ -730,7 +695,6 @@ from __future__ import annotations
 
 import csv
 
-
 class _DefaultDialect(csv.Dialect):
     delimiter = ";"
     quotechar = '"'
@@ -739,14 +703,12 @@ class _DefaultDialect(csv.Dialect):
     lineterminator = "\r\n"
     quoting = csv.QUOTE_MINIMAL
 
-
 def detect_encoding(raw_bytes: bytes) -> str:
     try:
         raw_bytes.decode("utf-8")
         return "utf-8"
     except UnicodeDecodeError:
         return "cp1250"
-
 
 def detect_dialect(sample_text: str) -> type[csv.Dialect]:
     try:
@@ -793,10 +755,8 @@ INVALID_EAN = "5901234123458"
 
 HEADER = "Nazwa;Cena hurtowa;EAN;Kategoria\n"
 
-
 def _csv(rows: str) -> bytes:
     return (HEADER + rows).encode("utf-8")
-
 
 def test_parses_valid_row():
     source = CsvCatalogSource(_csv(f"Łóżko;100,00;{VALID_EAN};Meble\n"), tenant_id="t1")
@@ -811,13 +771,11 @@ def test_parses_valid_row():
     assert product.source == "csv"
     assert product.currency == "PLN"
 
-
 def test_skips_row_with_missing_name():
     source = CsvCatalogSource(_csv(f";100,00;{VALID_EAN};Meble\n"), tenant_id="t1")
     products = source.fetch_products()
     assert len(products) == 0
     assert any("missing name" in w for w in source.warnings)
-
 
 def test_skips_row_with_invalid_price():
     source = CsvCatalogSource(_csv(f"Łóżko;not-a-price;{VALID_EAN};Meble\n"), tenant_id="t1")
@@ -825,14 +783,12 @@ def test_skips_row_with_invalid_price():
     assert len(products) == 0
     assert any("invalid price" in w for w in source.warnings)
 
-
 def test_clears_ean_with_bad_checksum_but_keeps_row():
     source = CsvCatalogSource(_csv(f"Łóżko;100,00;{INVALID_EAN};Meble\n"), tenant_id="t1")
     products = source.fetch_products()
     assert len(products) == 1
     assert products[0].ean is None
     assert any("invalid EAN checksum" in w for w in source.warnings)
-
 
 def test_skips_duplicate_ean():
     rows = f"Łóżko;100,00;{VALID_EAN};Meble\nStół;200,00;{VALID_EAN};Meble\n"
@@ -842,19 +798,16 @@ def test_skips_duplicate_ean():
     assert products[0].name == "Łóżko"
     assert any("duplicate EAN" in w for w in source.warnings)
 
-
 def test_missing_category_defaults_to_uncategorized():
     source = CsvCatalogSource(_csv(f"Łóżko;100,00;{VALID_EAN};\n"), tenant_id="t1")
     products = source.fetch_products()
     assert products[0].category == "Bez kategorii"
-
 
 def test_parses_cp1250_encoded_file():
     raw = (HEADER + f"Łóżko;100,00;{VALID_EAN};Meble\n").encode("cp1250")
     source = CsvCatalogSource(raw, tenant_id="t1")
     products = source.fetch_products()
     assert products[0].name == "Łóżko"
-
 
 def test_parses_comma_delimited_file():
     raw = f"Nazwa,Cena hurtowa,EAN,Kategoria\nŁóżko,100.00,{VALID_EAN},Meble\n".encode("utf-8")
@@ -882,10 +835,8 @@ from app.normalize.money import InvalidPriceError, parse_price
 from app.sources.column_mapping import ColumnMapping, detect_column_mapping
 from app.sources.csv_detect import detect_dialect, detect_encoding
 
-
 class EmptyCsvError(Exception):
     pass
-
 
 class CsvCatalogSource:
     SOURCE_NAME = "csv"
@@ -999,7 +950,6 @@ from decimal import Decimal
 from app.models.product import Product
 from app.normalize.grouping import group_by_category
 
-
 def _product(name: str, category: str) -> Product:
     return Product(
         tenant_id="t1",
@@ -1013,7 +963,6 @@ def _product(name: str, category: str) -> Product:
         category=category,
     )
 
-
 def test_groups_products_by_category():
     products = [
         _product("Łóżko", "Meble"),
@@ -1026,7 +975,6 @@ def test_groups_products_by_category():
     assert set(groups.keys()) == {"Meble", "Elektronika"}
     assert [p.name for p in groups["Meble"]] == ["Łóżko", "Stół"]
     assert [p.name for p in groups["Elektronika"]] == ["Telefon"]
-
 
 def test_empty_input_returns_empty_dict():
     assert group_by_category([]) == {}
@@ -1046,7 +994,6 @@ from collections import defaultdict
 from typing import Iterable
 
 from app.models.product import Product
-
 
 def group_by_category(products: Iterable[Product]) -> dict[str, list[Product]]:
     groups: dict[str, list[Product]] = defaultdict(list)
@@ -1107,7 +1054,6 @@ from app.sources.csv_source import CsvCatalogSource
 REAL_CATALOG_PATH = Path(
     os.environ.get("IS_IT_WORTH_IT_SAMPLE_CSV", "tests/fixtures/real_catalog.csv")
 )
-
 
 @pytest.mark.skipif(
     not REAL_CATALOG_PATH.exists(),
@@ -1173,11 +1119,9 @@ from decimal import Decimal
 
 from app.pricing.margin import round_money, round_pct
 
-
 def test_round_money_rounds_half_up_to_two_places():
     assert round_money(Decimal("81.300813008")) == Decimal("81.30")
     assert round_money(Decimal("-5.699186991")) == Decimal("-5.70")
-
 
 def test_round_pct_rounds_half_up_to_four_places():
     assert round_pct(Decimal("-0.05699186991")) == Decimal("-0.0570")
@@ -1197,14 +1141,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
-
 def round_money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-
 def round_pct(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-
 
 @dataclass(frozen=True)
 class CostConfig:
@@ -1212,7 +1153,6 @@ class CostConfig:
     shipping_cost: Decimal
     vat_pct: Decimal
     returns_pct: Decimal
-
 
 @dataclass(frozen=True)
 class MarginResult:
@@ -1266,7 +1206,6 @@ COST_CONFIG = CostConfig(
     returns_pct=Decimal("0.02"),
 )
 
-
 def test_unprofitable_at_market_price():
     result = calculate_margin(
         wholesale_price=Decimal("60.00"),
@@ -1280,7 +1219,6 @@ def test_unprofitable_at_market_price():
     assert result.margin == Decimal("-5.70")
     assert result.margin_pct == Decimal("-0.0570")
 
-
 def test_unprofitable_even_5pct_above_market():
     result = calculate_margin(
         wholesale_price=Decimal("60.00"),
@@ -1291,7 +1229,6 @@ def test_unprofitable_even_5pct_above_market():
     assert result.sale_price == Decimal("105.00")
     assert result.margin == Decimal("-2.23")
     assert result.margin_pct == Decimal("-0.0213")
-
 
 def test_profitable_at_market_price():
     result = calculate_margin(
@@ -1381,7 +1318,6 @@ COST_CONFIG = CostConfig(
     returns_pct=Decimal("0.02"),
 )
 
-
 def test_matrix_returns_four_scenarios_in_order():
     results = calculate_margin_matrix(
         wholesale_price=Decimal("40.00"),
@@ -1431,7 +1367,6 @@ SCENARIO_ADJUSTMENTS: tuple[Decimal, ...] = (
     Decimal("0.00"),
     Decimal("0.05"),
 )
-
 
 def calculate_margin_matrix(
     wholesale_price: Decimal,

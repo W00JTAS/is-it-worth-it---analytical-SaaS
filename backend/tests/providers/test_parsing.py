@@ -100,8 +100,7 @@ def test_rejects_known_price_comparison_aggregator_domains():
     # ceneo.pl and skapiec.pl comparison pages as source_url in 3/23 found
     # offers — one of them (skapiec.pl) with a price that matched nothing on
     # the actual cited page (fabricated). A prose instruction is not reliable
-    # enough here; a domain check is deterministic. See
-    # .claude/rules/groq-firecrawl-offer-validity-audit.md's 2026-09-08 update.
+    # enough here; a domain check is deterministic.
     for url in (
         "https://www.ceneo.pl/100716985?srsltid=abc",
         "https://www.skapiec.pl/site/cat/8/comp/882235706",

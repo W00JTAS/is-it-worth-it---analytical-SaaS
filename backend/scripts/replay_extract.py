@@ -3,19 +3,15 @@
 `provider_eval.py --keep-raw` run, at zero search-step cost (no Firecrawl
 credits, no Groq compound/search-orchestration tokens).
 
-Why this exists: 2026-09-02's price-bleed bugfix session (see
-`.claude/rules/groq-compound-free-tier-reliability.md`, "Aktualizacja
-2026-09-02 (piąta)") discovered a fourth, independent Groq rate limit — a
+Why this exists: 2026-09-02's price-bleed bugfix session discovered a
+fourth, independent Groq rate limit — a
 200,000 tokens/day budget on the extraction model itself
 (`openai/gpt-oss-20b`), shared by BOTH `GroqProvider._extract` and
 `FirecrawlProvider._extract`. That session replayed stored `search_raw_text`
 through `FirecrawlProvider._extract` directly (skipping `_search` entirely)
 to test a prompt fix without spending any more of that scarce budget — using
-a one-off script that lived in `/tmp` and was lost when the session ended
-(see `.claude/rules/subagent-research-cost-and-survival.md`'s "write to
-disk, not just to memory" principle — applied here at the level of the
-*tool itself*, not just its findings). This script makes that technique
-permanent, tracked, and resumable.
+a one-off script that lived in `/tmp` and was lost when the session ended.
+This script makes that technique permanent, tracked, and resumable.
 
 It reuses `FirecrawlProvider._extract` completely unmodified — same prompt
 builder, same JSON-schema response parsing, same `call_with_retry` — so
@@ -225,8 +221,7 @@ def _is_resolved(record: dict) -> bool:
     reaches this status at all). Treating "error" as resolved would silently
     and permanently drop those SKUs from every future run on a one-off
     hiccup (this project has hit exactly that class of transient failure
-    before — see .claude/rules/groq-compound-free-tier-reliability.md's
-    "seed=7" hold-out section).
+    before, during the seed=7 hold-out run).
 
     `"parse_failed"` stays resolved: the same search_raw_text fails the same
     round-trip check every time (parse_and_validate is pure), so retrying it
@@ -289,8 +284,8 @@ def build_provider(groq_api_key: str) -> FirecrawlProvider:
 
 def _write_output(out_path: Path, source_path: Path, checked: dict) -> None:
     """Writes the checkpoint atomically: the whole point of writing after
-    every entry is surviving a mid-run kill (session limit, Ctrl-C, crash —
-    see .claude/rules/sdd-interrupted-by-account-limit.md), and a plain
+    every entry is surviving a mid-run kill (quota exhaustion, Ctrl-C,
+    crash), and a plain
     write_text() can itself be killed mid-write, leaving truncated/corrupt
     JSON that then crashes the NEXT invocation's resume-read. Writing to a
     sibling temp file and os.replace()-ing it into place is atomic on

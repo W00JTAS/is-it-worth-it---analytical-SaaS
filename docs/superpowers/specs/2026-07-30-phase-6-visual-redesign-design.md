@@ -24,7 +24,7 @@ queue after this.
 This design was produced with the brainstorming skill's visual companion (browser-based mockups), not
 text-only dialogue — several of the decisions below (visual direction, light/dark handling, shell
 layout) were picked by the user clicking through rendered comparisons, not by describing preferences
-in words. Mockups live in `.superpowers/brainstorm/` (gitignored, not part of this repo's history).
+in words. The mockups themselves are not part of this repo's history.
 
 ## Decisions
 
