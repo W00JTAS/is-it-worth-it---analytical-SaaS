@@ -19,3 +19,6 @@
 
 # Raw benchmark dumps — scraped third-party page content, not project code
 /backend/scripts/eval_results/
+
+# Local tuning-verification script: imports Playwright from a path outside this repo
+backend/scripts/verify_offers_browser.mjs
