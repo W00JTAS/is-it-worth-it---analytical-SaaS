@@ -1,7 +1,5 @@
 # Phase 6: ShopifySource Sketch Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Build a read-only `ShopifyCatalogSource` implementing the existing `CatalogSource`
 protocol against Shopify's GraphQL Admin API, to prove (or disprove) that the abstraction survives
 contact with a real second source — no OAuth, no hosting, no write-back.
@@ -58,7 +56,6 @@ from decimal import Decimal
 from app.sources.base import CatalogSource
 from app.sources.shopify_source import ShopifyCatalogSource
 
-
 class _FakeResponse:
     def __init__(self, payload: dict):
         self._payload = payload
@@ -68,7 +65,6 @@ class _FakeResponse:
 
     def json(self) -> dict:
         return self._payload
-
 
 class _FakeClient:
     """Returns the currency-query response on the first call, then one
@@ -88,13 +84,11 @@ class _FakeClient:
         page = self._pages.pop(0)
         return _FakeResponse({"data": {"products": page}})
 
-
 def _single_product_page(node: dict, has_next: bool = False, cursor: str | None = None) -> dict:
     return {
         "edges": [{"node": node}],
         "pageInfo": {"hasNextPage": has_next, "endCursor": cursor},
     }
-
 
 def _make_source(client: _FakeClient) -> ShopifyCatalogSource:
     return ShopifyCatalogSource(
@@ -104,11 +98,9 @@ def _make_source(client: _FakeClient) -> ShopifyCatalogSource:
         client=client,
     )
 
-
 def test_implements_catalog_source_protocol():
     source = _make_source(_FakeClient(currency="PLN", pages=[]))
     assert isinstance(source, CatalogSource)
-
 
 def test_maps_single_variant_product():
     client = _FakeClient(
@@ -150,7 +142,6 @@ def test_maps_single_variant_product():
     assert product.wholesale_price == Decimal("49.99")
     assert product.currency == "PLN"
     assert product.category == "Kuchnia"
-
 
 def test_names_non_default_variants_with_variant_title():
     client = _FakeClient(
@@ -195,7 +186,6 @@ def test_names_non_default_variants_with_variant_title():
         "gid://shopify/ProductVariant/21",
     ]
 
-
 def test_skips_zero_price_variant_and_falls_back_category():
     client = _FakeClient(
         currency="PLN",
@@ -227,7 +217,6 @@ def test_skips_zero_price_variant_and_falls_back_category():
 
     assert products == []
     assert any("zero price" in w for w in source.warnings)
-
 
 def test_clears_invalid_barcode_checksum():
     client = _FakeClient(
@@ -313,7 +302,6 @@ query($cursor: String) {
   }
 }
 """
-
 
 class ShopifyCatalogSource:
     SOURCE_NAME = "shopify"
@@ -578,7 +566,6 @@ import pytest
 
 from app.sources.shopify_source import ShopifyApiError
 
-
 class _RaisingStatusClient:
     """Simulates a non-2xx HTTP response: raise_for_status() raises."""
 
@@ -596,11 +583,9 @@ class _RaisingStatusClient:
 
         return _Resp()
 
-
 class _GraphQlErrorClient:
     def post(self, url, headers, json):
         return _FakeResponse({"errors": [{"message": "Access denied for currencyCode field."}]})
-
 
 def test_raises_shopify_api_error_on_non_200_response():
     source = ShopifyCatalogSource(
@@ -612,7 +597,6 @@ def test_raises_shopify_api_error_on_non_200_response():
 
     with pytest.raises(ShopifyApiError):
         source.fetch_products()
-
 
 def test_raises_shopify_api_error_on_graphql_errors_array():
     source = ShopifyCatalogSource(
@@ -711,7 +695,6 @@ pytestmark = pytest.mark.skipif(
     reason="SHOPIFY_TEST_SHOP/SHOPIFY_TEST_TOKEN not set — export them to run this opt-in test "
     "against a real Shopify dev store",
 )
-
 
 def test_fetch_products_maps_a_real_multi_variant_catalog():
     source = ShopifyCatalogSource(

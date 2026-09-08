@@ -1,7 +1,5 @@
 # GroqProvider + Retry + Budget (Faza 1) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Add a `GroqProvider` (free-tier AI price lookup via a two-call search-then-extract pattern) behind the existing `PriceProvider` Protocol, with reusable HTTP retry/rate-limit handling and a `paused` scan state — all still on SQLite, single-user, no BYOK wiring yet.
 
 **Architecture:** `GroqProvider` calls `groq/compound-mini` (web search, freeform text answer) then `openai/gpt-oss-20b` (structured JSON extraction via `response_format: json_schema`), reusing the same `RESPONSE_SCHEMA`/validation logic `PerplexityProvider` already uses — extracted into a shared `app/providers/parsing.py` so the two providers' validation rules cannot drift apart. A new `app/providers/retry.py` wraps HTTP calls with backoff, distinguishing a rate limit (retryable, pauses the scan) from a bad key (not retryable, fails the scan immediately). `run_scan` learns a third terminal-ish outcome (`paused`) alongside today's `done`/`failed`.
@@ -12,9 +10,9 @@
 
 ## Global Constraints
 
-- Money stays `Decimal`, never `float` — see `.claude/rules/money.md`.
+- Money stays `Decimal`, never `float` — see `CLAUDE.md`.
 - No new runtime dependencies; `httpx` is already a backend dependency.
-- Every existing test must still pass unmodified in behavior (only call-site signatures change where noted) — this repo's `repo-reviewer` treats a silent behavior change as the highest-severity finding class.
+- Every existing test must still pass unmodified in behavior (only call-site signatures change where noted) — this repo's whole-branch review treats a silent behavior change as the highest-severity finding class.
 - `GROQ_API_KEY` follows the exact same env-var pattern as `PERPLEXITY_API_KEY` (`os.environ`, read once at provider construction) — no settings library yet (that's Faza 2/3).
 - Groq's two-call pattern is confirmed as the *only* documented path (verified this session against `console.groq.com/docs/tool-use/built-in-tools/web-search` and `console.groq.com/docs/structured-outputs`): `compound`/`compound-mini` are not on the strict `json_schema` model list, and structured outputs are documented as incompatible with tool use. Do not attempt same-call composition.
 - Groq's compound response shape (verified verbatim from `https://console.groq.com/docs/tool-use/built-in-tools/web-search.md`, 2026-08-28): the endpoint is `https://api.groq.com/openai/v1/chat/completions` (same OpenAI-compatible shape Perplexity uses); the final answer is `choices[0].message.content`; source data is `choices[0].message.executed_tools[0].search_results`, a list of `{"title": str, "url": str, "content": str, "score": float}`. **There is no top-level `citations` field like Perplexity's** — citations must be built from the `search_results[*].url` values.
@@ -55,18 +53,15 @@
 # backend/tests/providers/test_parsing.py
 from app.providers.parsing import validate_offer_fields
 
-
 def test_returns_none_when_not_a_dict():
     assert validate_offer_fields(
         "not a dict", raw_response="{}", citations=(), max_delivery_days=5
     ) is None
 
-
 def test_returns_none_when_not_found():
     assert validate_offer_fields(
         {"found": False}, raw_response="{}", citations=(), max_delivery_days=5
     ) is None
-
 
 def test_returns_offer_for_valid_input():
     parsed = {
@@ -90,7 +85,6 @@ def test_returns_offer_for_valid_input():
     assert offer.citations == ("https://example.com/product",)
     assert offer.raw_response == "{}"
 
-
 def test_returns_none_when_delivery_exceeds_limit():
     parsed = {
         "found": True, "price": 10.0, "currency": "PLN", "seller": "X",
@@ -99,7 +93,6 @@ def test_returns_none_when_delivery_exceeds_limit():
     assert validate_offer_fields(
         parsed, raw_response="{}", citations=(), max_delivery_days=5
     ) is None
-
 
 def test_returns_none_when_confidence_out_of_range():
     parsed = {
@@ -144,7 +137,6 @@ RESPONSE_SCHEMA: dict[str, Any] = {
         "source_url", "delivery_days", "confidence",
     ],
 }
-
 
 def validate_offer_fields(
     parsed: object,
@@ -277,23 +269,19 @@ from decimal import Decimal
 
 from app.providers.base import ProviderAuthError, ProviderProfile, ProviderRateLimited, ProviderUnavailable
 
-
 def test_provider_profile_holds_cost_and_timing():
     profile = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
     assert profile.cost_per_query_usd == Decimal("0.010")
     assert profile.seconds_per_query == 2.5
-
 
 def test_provider_rate_limited_is_a_provider_unavailable_and_carries_retry_after():
     exc = ProviderRateLimited("rate limited", retry_after=30.0)
     assert isinstance(exc, ProviderUnavailable)
     assert exc.retry_after == 30.0
 
-
 def test_provider_rate_limited_retry_after_defaults_to_none():
     exc = ProviderRateLimited("rate limited")
     assert exc.retry_after is None
-
 
 def test_provider_auth_error_is_not_a_provider_unavailable():
     # Deliberate: an auth error must never be treated as "retry me later" —
@@ -339,7 +327,6 @@ class ProviderRateLimited(ProviderUnavailable):
     def __init__(self, message: str, retry_after: float | None = None):
         super().__init__(message)
         self.retry_after = retry_after
-
 
 class ProviderAuthError(Exception):
     """Raised when the provider rejects the API key outright (HTTP 401/403).
@@ -425,7 +412,6 @@ from app.scans.estimate import estimate_cost
 
 PROFILE = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
 
-
 def test_estimate_with_no_misses_and_no_stale_is_free_and_instant():
     result = estimate_cost(cache_misses=0, stale_count=0, max_concurrency=5, profile=PROFILE)
 
@@ -435,7 +421,6 @@ def test_estimate_with_no_misses_and_no_stale_is_free_and_instant():
     assert result.cost_usd_with_refresh == Decimal("0.00")
     assert result.seconds_without_refresh == 0.0
     assert result.seconds_with_refresh == 0.0
-
 
 def test_estimate_scales_with_query_count_and_concurrency():
     result = estimate_cost(cache_misses=100, stale_count=20, max_concurrency=10, profile=PROFILE)
@@ -447,14 +432,12 @@ def test_estimate_scales_with_query_count_and_concurrency():
     assert result.seconds_without_refresh == (100 / 10) * PROFILE.seconds_per_query
     assert result.seconds_with_refresh == (120 / 10) * PROFILE.seconds_per_query
 
-
 def test_estimate_with_refresh_is_never_cheaper_than_without():
     result = estimate_cost(cache_misses=50, stale_count=5, max_concurrency=5, profile=PROFILE)
 
     assert result.queries_with_refresh >= result.queries_without_refresh
     assert result.cost_usd_with_refresh >= result.cost_usd_without_refresh
     assert result.seconds_with_refresh >= result.seconds_without_refresh
-
 
 def test_estimate_uses_the_given_profiles_own_cost_and_timing():
     # A near-zero-cost profile (e.g. Groq's free tier) must actually change
@@ -483,7 +466,6 @@ from decimal import Decimal
 
 from app.providers.base import ProviderProfile
 from app.scans.models import CostEstimate
-
 
 def estimate_cost(
     cache_misses: int, stale_count: int, max_concurrency: int, profile: ProviderProfile
@@ -523,7 +505,6 @@ from app.scans.sampling import resolve_sample_scope
 from app.scans.staleness import analyze_staleness
 from app.scans.store import ScanStore
 from app.sources.base import CatalogSource
-
 
 def create_scan(
     *,
@@ -593,7 +574,6 @@ In `backend/tests/scans/test_orchestration.py`, add a fake provider near the top
 from decimal import Decimal as _Decimal  # already imported as Decimal above if present — reuse, don't duplicate
 from app.providers.base import ProviderProfile
 
-
 class _FakeProvider:
     name = "perplexity"
     profile = ProviderProfile(cost_per_query_usd=Decimal("0.010"), seconds_per_query=2.5)
@@ -645,11 +625,9 @@ import pytest
 from app.providers.base import ProviderAuthError, ProviderRateLimited
 from app.providers.retry import call_with_retry
 
-
 def _response(status_code: int, headers: dict | None = None) -> httpx.Response:
     request = httpx.Request("POST", "https://api.example.com/x")
     return httpx.Response(status_code=status_code, headers=headers or {}, request=request)
-
 
 def test_returns_response_immediately_on_success():
     calls = []
@@ -663,7 +641,6 @@ def test_returns_response_immediately_on_success():
     assert response.status_code == 200
     assert len(calls) == 1
 
-
 def test_raises_provider_auth_error_immediately_on_401_no_retry():
     calls = []
 
@@ -675,7 +652,6 @@ def test_raises_provider_auth_error_immediately_on_401_no_retry():
         call_with_retry(send)
 
     assert len(calls) == 1  # must not retry a bad key
-
 
 def test_raises_provider_auth_error_immediately_on_403_no_retry():
     calls = []
@@ -689,7 +665,6 @@ def test_raises_provider_auth_error_immediately_on_403_no_retry():
 
     assert len(calls) == 1
 
-
 def test_retries_429_then_succeeds(monkeypatch):
     monkeypatch.setattr("app.providers.retry.time.sleep", lambda *_: None)
     responses = [_response(429), _response(429), _response(200)]
@@ -702,7 +677,6 @@ def test_retries_429_then_succeeds(monkeypatch):
     assert response.status_code == 200
     assert responses == []
 
-
 def test_raises_provider_rate_limited_after_exhausting_attempts(monkeypatch):
     monkeypatch.setattr("app.providers.retry.time.sleep", lambda *_: None)
 
@@ -713,7 +687,6 @@ def test_raises_provider_rate_limited_after_exhausting_attempts(monkeypatch):
         call_with_retry(send)
 
     assert exc_info.value.retry_after == 12.0
-
 
 def test_retries_5xx_then_succeeds(monkeypatch):
     monkeypatch.setattr("app.providers.retry.time.sleep", lambda *_: None)
@@ -726,7 +699,6 @@ def test_retries_5xx_then_succeeds(monkeypatch):
 
     assert response.status_code == 200
 
-
 def test_raises_http_status_error_on_permanent_4xx_without_retry():
     calls = []
 
@@ -738,7 +710,6 @@ def test_raises_http_status_error_on_permanent_4xx_without_retry():
         call_with_retry(send)
 
     assert len(calls) == 1  # a plain bad request is not retried
-
 
 def test_retries_transport_error_then_succeeds(monkeypatch):
     monkeypatch.setattr("app.providers.retry.time.sleep", lambda *_: None)
@@ -754,7 +725,6 @@ def test_retries_transport_error_then_succeeds(monkeypatch):
 
     assert response.status_code == 200
     assert attempts["n"] == 2
-
 
 def test_reraises_transport_error_after_exhausting_attempts(monkeypatch):
     monkeypatch.setattr("app.providers.retry.time.sleep", lambda *_: None)
@@ -791,7 +761,6 @@ from app.providers.base import ProviderAuthError, ProviderRateLimited
 MAX_ATTEMPTS = 4
 BASE_DELAY_SECONDS = 1.0
 MAX_DELAY_SECONDS = 20.0
-
 
 def call_with_retry(send: Callable[[], httpx.Response]) -> httpx.Response:
     """Calls `send()` up to MAX_ATTEMPTS times.
@@ -837,7 +806,6 @@ def call_with_retry(send: Callable[[], httpx.Response]) -> httpx.Response:
 
     raise AssertionError("unreachable: loop always returns or raises")
 
-
 def _parse_retry_after(response: httpx.Response) -> float | None:
     value = response.headers.get("Retry-After")
     if value is None:
@@ -846,7 +814,6 @@ def _parse_retry_after(response: httpx.Response) -> float | None:
         return float(value)
     except ValueError:
         return None
-
 
 def _sleep_backoff(attempt: int, retry_after: float | None = None) -> None:
     if retry_after is not None:
@@ -894,7 +861,6 @@ from app.models.product import Product
 from app.providers.base import ProviderAuthError, ProviderUnavailable
 from app.providers.groq import GroqProvider
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1", source="csv", external_id="1", variant_id=None,
@@ -904,17 +870,14 @@ def _make_product(**overrides) -> Product:
     defaults.update(overrides)
     return Product(**defaults)
 
-
 def _search_response(content: str, search_results: list[dict] | None = None) -> dict:
     message: dict = {"content": content}
     if search_results is not None:
         message["executed_tools"] = [{"search_results": search_results}]
     return {"choices": [{"message": message}]}
 
-
 def _extract_response(parsed: dict) -> dict:
     return {"choices": [{"message": {"content": json.dumps(parsed)}}]}
-
 
 class _FakeResponse:
     def __init__(self, payload: dict, status_code: int = 200):
@@ -926,7 +889,6 @@ class _FakeResponse:
 
     def json(self) -> dict:
         return self._payload
-
 
 class _TwoCallClient:
     """Returns `search_payload` for the compound-mini call, `extract_payload`
@@ -942,7 +904,6 @@ class _TwoCallClient:
         if json["model"] == "groq/compound-mini":
             return _FakeResponse(self._search_payload)
         return _FakeResponse(self._extract_payload)
-
 
 def test_two_call_flow_returns_offer_with_citations_from_search_results():
     client = _TwoCallClient(
@@ -971,7 +932,6 @@ def test_two_call_flow_returns_offer_with_citations_from_search_results():
     assert client.requests[1]["json"]["model"] == "openai/gpt-oss-20b"
     assert client.requests[1]["json"]["response_format"]["type"] == "json_schema"
 
-
 def test_uses_bearer_auth_on_both_calls():
     client = _TwoCallClient(
         search_payload=_search_response("no offer found"),
@@ -983,7 +943,6 @@ def test_uses_bearer_auth_on_both_calls():
 
     assert all(r["headers"]["Authorization"] == "Bearer secret-key" for r in client.requests)
 
-
 def test_returns_none_when_extract_says_not_found():
     client = _TwoCallClient(
         search_payload=_search_response("Nothing matched."),
@@ -994,7 +953,6 @@ def test_returns_none_when_extract_says_not_found():
     offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
 
     assert offer is None
-
 
 def test_returns_none_when_no_executed_tools_present():
     # The model may answer from its own knowledge without calling web search;
@@ -1008,7 +966,6 @@ def test_returns_none_when_no_executed_tools_present():
     offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
 
     assert offer is None  # must not raise on missing executed_tools
-
 
 def test_deduplicates_citation_urls_across_multiple_search_results():
     client = _TwoCallClient(
@@ -1031,11 +988,9 @@ def test_deduplicates_citation_urls_across_multiple_search_results():
 
     assert offer.citations == ("https://example.com/x", "https://example.com/y")
 
-
 class _SearchCallFailsClient:
     def post(self, url, headers, json):
         raise httpx.ConnectError("connection refused")
-
 
 def test_raises_provider_unavailable_when_search_call_fails():
     provider = GroqProvider(api_key="test-key", client=_SearchCallFailsClient())
@@ -1043,13 +998,11 @@ def test_raises_provider_unavailable_when_search_call_fails():
     with pytest.raises(ProviderUnavailable):
         provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
 
-
 class _AuthFailsOnExtractClient:
     def post(self, url, headers, json):
         if json["model"] == "groq/compound-mini":
             return _FakeResponse(_search_response("some text"))
         return _FakeResponse({}, status_code=401)
-
 
 def test_raises_provider_auth_error_when_extract_call_rejects_key():
     provider = GroqProvider(api_key="bad-key", client=_AuthFailsOnExtractClient())
@@ -1057,11 +1010,9 @@ def test_raises_provider_auth_error_when_extract_call_rejects_key():
     with pytest.raises(ProviderAuthError):
         provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
 
-
 class _MalformedSearchContentClient:
     def post(self, url, headers, json):
         return _FakeResponse({"choices": [{}]})  # no "message" key at all
-
 
 def test_returns_none_on_malformed_search_response():
     provider = GroqProvider(api_key="test-key", client=_MalformedSearchContentClient())
@@ -1099,7 +1050,6 @@ SEARCH_MODEL = "groq/compound-mini"
 EXTRACT_MODEL = "openai/gpt-oss-20b"
 
 logger = logging.getLogger(__name__)
-
 
 class GroqProvider:
     """Free-tier BYOK provider. Two real HTTP calls per lookup because Groq's
@@ -1281,7 +1231,6 @@ pytestmark = pytest.mark.skipif(
     reason="GROQ_API_KEY not set — export it to run this opt-in smoke test",
 )
 
-
 def test_find_cheapest_returns_a_contract_valid_result_or_none():
     provider = GroqProvider(api_key=os.environ["GROQ_API_KEY"])
     product = Product(
@@ -1341,7 +1290,6 @@ Add to `backend/tests/scans/test_engine.py` (after the existing `test_run_scan_n
 ```python
 from app.providers.base import ProviderAuthError, ProviderRateLimited
 
-
 def test_run_scan_pauses_without_failing_when_rate_limited(tmp_path):
     products = [
         _make_product(external_id="1", ean="5901234123457"),
@@ -1361,7 +1309,6 @@ def test_run_scan_pauses_without_failing_when_rate_limited(tmp_path):
     store.close()
     cache.close()
 
-
 def test_run_scan_can_resume_a_paused_scan_after_budget_recovers(tmp_path):
     products = [_make_product(external_id="1", ean="5901234123457")]
     store, scan_id = _make_store_with_products(tmp_path, products)
@@ -1376,7 +1323,6 @@ def test_run_scan_can_resume_a_paused_scan_after_budget_recovers(tmp_path):
     assert store.get_scan(scan_id).status == ScanStatus.DONE
     store.close()
     cache.close()
-
 
 def test_run_scan_fails_fast_on_auth_error_without_retrying_every_product(tmp_path):
     products = [
@@ -1442,7 +1388,6 @@ from app.cache.sqlite_cache import PriceCache
 from app.providers.base import PriceProvider, ProviderAuthError, ProviderRateLimited, ProviderUnavailable
 from app.providers.lookup import get_offer_cached
 from app.scans.store import ScanStore
-
 
 async def run_scan(
     scan_id: str,
@@ -1512,7 +1457,6 @@ from app.cache.sqlite_cache import PriceCache
 from app.providers.base import PriceProvider, ProviderAuthError, ProviderRateLimited, ProviderUnavailable
 from app.providers.lookup import get_offer_cached
 from app.scans.store import ScanStore
-
 
 async def run_scan(
     scan_id: str,
@@ -1603,7 +1547,6 @@ def test_get_provider_selects_groq_from_env_var(monkeypatch):
     assert provider.name == "groq"
     api_module._shared_provider = None  # leave a clean slate for later tests
 
-
 def test_get_provider_defaults_to_perplexity_when_provider_env_unset(monkeypatch):
     monkeypatch.delenv("PROVIDER", raising=False)
     monkeypatch.setenv("PERPLEXITY_API_KEY", "test-perplexity-key")
@@ -1677,9 +1620,6 @@ git commit -m "feat: select AI provider via PROVIDER env var (perplexity default
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-08-28-groq-provider-retry-budget.md`. Two execution options:
-
-1. **Subagent-Driven (recommended)** — I dispatch a fresh subagent per task, review between tasks, fast iteration
-2. **Inline Execution** — Execute tasks in this session using executing-plans, batch execution with checkpoints
+Plan complete and saved to `docs/superpowers/plans/2026-08-28-groq-provider-retry-budget.md`.
 
 Which approach?

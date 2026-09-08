@@ -2,16 +2,13 @@
 
 Master plan: `docs/superpowers/specs/2026-07-28-is-it-worth-it-design.md`, line 148 (the
 `add-catalog-source` skill was named there as meta-layer work, deferred until a second source
-existed to design it against). Surfaced as a concrete follow-up in
-`docs/superpowers/specs/2026-08-26-phase-7-meta-writeup.md`, point 4, and carried forward by
-`.claude/handoffs/handoff_10.md`.
+existed to design it against).
 
 ## Why now
 
 Two `CatalogSource` implementations exist (`CsvCatalogSource`, `ShopifyCatalogSource`), and a third
-(WooCommerce) is planned. The repo-reviewer memory file
-`.claude/agent-memory/repo-reviewer/source-protocol-invariants.md`, written during the Phase 6
-Shopify sketch, found that the `CatalogSource` `Protocol` declares one method
+(WooCommerce) is planned. A whole-branch review during the Phase 6 Shopify sketch found that
+the `CatalogSource` `Protocol` declares one method
 (`fetch_products()`) but the real contract is a five-part normalization pipeline that exists only
 as duplicated hand-written logic in each source file:
 
@@ -140,10 +137,9 @@ assertion is updated to match the new per-variant/"missing name" wording describ
 No test changes are needed for `test_csv_source_integration.py` or `test_shopify_source_live.py` —
 both exercise end-to-end behavior that is unaffected by where the normalization code lives.
 
-## `add-catalog-source` skill
+## Adding a new catalog source
 
-New `.claude/skills/add-catalog-source/SKILL.md`. Triggers when a new catalog source is being
-added (e.g. "add a WooCommerce source"). Contents:
+The procedure for adding one (e.g. "add a WooCommerce source"):
 
 1. Create `app/sources/<name>_source.py` with `class <Name>CatalogSource(BaseCatalogSource)`,
    `SOURCE_NAME = "<name>"`.
@@ -159,8 +155,7 @@ added (e.g. "add a WooCommerce source"). Contents:
    `test_base_source.py` and do not need re-testing per source.
 5. Wire the new source into `app/scans/orchestration.py` (or wherever it needs to be reachable) if
    applicable.
-6. Run the `repo-reviewer` subagent before merging, per this project's whole-branch review
-   convention.
+6. Review the whole branch before merging, per this project's review convention.
 
 ## Definition of done
 
@@ -169,6 +164,4 @@ added (e.g. "add a WooCommerce source"). Contents:
 - `CsvCatalogSource` and `ShopifyCatalogSource` contain zero normalization logic — grep confirms
   neither file matches `strip()\|is_valid_ean\|len(raw\|seen_eans\|Bez kategorii` outside of
   `_iter_raw_items` passing raw values through.
-- `.claude/skills/add-catalog-source/SKILL.md` exists and is committed.
-- `.claude/agent-memory/repo-reviewer/source-protocol-invariants.md`'s "Stale when" condition is
-  now true; update that file to point at `BaseCatalogSource` instead of describing the gap.
+- The "adding a new catalog source" procedure above is documented and current.

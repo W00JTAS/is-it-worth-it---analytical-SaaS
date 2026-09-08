@@ -2,9 +2,9 @@
 
 ## Context
 
-**Nadrzędny cel projektu: portfolio/CV.** Publiczne repo na GitHubie i działające demo, które robi
-dobre wrażenie na rekruterze, mają pierwszeństwo przed pozyskaniem realnych użytkowników. Ta
-kolejność rozstrzyga kilka decyzji poniżej inaczej, niż rozstrzygnęłaby ją logika „budujemy SaaS".
+**Nadrzędny cel projektu: publiczne repo i działające demo**, które da się obejrzeć bez zakładania
+konta. To ma pierwszeństwo przed pozyskaniem realnych użytkowników, a ta kolejność rozstrzyga kilka
+decyzji poniżej inaczej, niż rozstrzygnęłaby ją logika „budujemy SaaS".
 
 Projekt jest dziś **jednoosobowym narzędziem lokalnym**: brak logowania, brak użytkowników, jeden
 plik SQLite (`backend/data/app.sqlite3`, 387 MB), klucz Perplexity czytany raz z `os.environ` do
@@ -33,15 +33,14 @@ użytkowników, bezpieczne przechowywanie cudzych sekretów, oraz bazę, która 
 | 11 | **Jedno repo, publiczne, w całości** — łącznie z warstwą chmurową i konfiguracją deploymentu |
 | 12 | **Demo: 3 gotowe próbki** (technologia, zabawki, kuchnia) na kluczu Groq operatora |
 | 13 | **Shopify/WooCommerce zostają w kodzie, znikają z UI**; w przyszłości osobne repo per platforma |
-| 14 | **`docs/` publikujemy; `.claude/`, `.agents/` i handoffy — nie**; historia commitów zostaje bez przepisywania |
 
 ### Dlaczego rejestracja na zaproszenie zamiast otwartej
 
 Otwarta rejestracja czyni Cię depozytariuszem cudzych kluczy Groq/Perplexity — z RODO, obowiązkiem
-reakcji na incydent i faktem, że jeden przejęty kontener odsłania je wszystkie naraz. Do CV nie
-wnosi **nic**: architektura wielu użytkowników wygląda identycznie przy zaproszeniach. Za to
+reakcji na incydent i faktem, że jeden przejęty kontener odsłania je wszystkie naraz. Otwartość
+nie zmienia architektury: obsługa wielu użytkowników wygląda identycznie przy zaproszeniach. Za to
 **zmniejsza zakres** — znika CAPTCHA, limity antyabuse'owe, weryfikacja e-maili i polityka
-prywatności. Rekruter i tak nie zakłada konta; klika demo.
+prywatności. Odwiedzający i tak nie zakłada konta; klika demo.
 
 ## Ustalenia, które zmieniły projekt
 
@@ -67,56 +66,9 @@ Zweryfikowane bezpośrednio na żywej bazie, w historii gita i w dokumentacji �
   zacommitowane, w całej historii nie ma żadnego wzorca klucza, nie ma pliku CSV od hurtowni ani
   bazy SQLite. Upublicznienie **nie wymaga przepisywania historii** — to rzadki i cenny stan wyjściowy.
 
-## Publikacja na GitHubie
-
-**Idzie do publicznego repo:** cały kod backendu i frontendu łącznie z warstwą chmurową,
-`Dockerfile`, `fly.toml`, `.github/workflows/ci.yml`, migracje SQL z politykami RLS, `.env.example`
-(same nazwy zmiennych), `docs/superpowers/specs/` i plany faz, `README` z architekturą i linkiem
-do demo, `SECURITY.md`.
-
-**Nie idzie:** `.claude/` (reguły, pamięć agenta, hooki), handoffy (już gitignorowane), `.env.local`,
-`backend/data/`, plik CSV od hurtowni, `frontend/dist/`, zwendorowane cudze skille
-`.agents/skills/` (449 KB obcego JS-a, już skasowane w working tree).
-
-**Historia commitów zostaje bez przepisywania.** 68 z 147 commitów niesie trailer
-`Co-Authored-By: Claude` — to jest już nieusuwalne bez przepisania 147 commitów tuż przed
-publikacją, co samo w sobie bywa czytane gorzej niż jawność (widoczne domięszanie historii). Praca
-z Claude Code jest dziś powszechna i częściej plusem niż minusem, pod warunkiem że widać proces
-review wokół niej — a ten repo właśnie dokumentuje przez `docs/superpowers/specs`. Rozstrzyga to
-proporcja, nie ukrywanie: `docs/` (23 pliki, czytelne dla człowieka, realne artefakty projektowe)
-zostaje; `.claude/`+`.agents/` (167 plików, w większości konfiguracja narzędzia i cudzy vendorowany
-kod, nie dokumentacja projektu) — nie. To ten sam standard co nie-commitowanie `.vscode/`, nie
-ukrywanie faktu użycia edytora.
-
-**Dwie zmiany, które zamieniają to z „co ukryć" w „co ugrać":**
-
-1. **Przenieść `docs/superpowers/` → `docs/design/` (specs) i `docs/plans/`.** Segment ścieżki
-   `superpowers` to nazwa pluginu Claude Code — jedyne, co zdradza narzędzie w folderze, którego
-   *treść* jest w pełni ludzka i wartościowa. Przy okazji przejrzeć dokumenty pod kątem zdań
-   adresowanych do agenta, nie do czytelnika.
-2. **Wydobyć `.claude/rules/money.md` do publicznego `docs/lessons-learned.md`.** Ten plik opisuje
-   trzy realne błędy pieniężne znalezione na prawdziwym pliku 115 225 wierszy —
-   `csv.Sniffer` przestawiający kolumny, `set` z losową kolejnością iteracji wybierający raz tę, raz
-   inną kolumnę ceny, i `"0.00"` jako marker „cena na zapytanie" przechodzący jako darmowy produkt.
-   Każdy z nich przeszedł najpierw przez syntetyczne testy. Przepisane w pierwszej osobie jako notatki
-   inżynierskie jest to prawdopodobnie **najmocniejszy pojedynczy dokument w całym repo** — i dziś
-   leży w folderze, którego nie publikujemy.
-
-**Checklist przed przełączeniem na publiczne** (własne zadanie w Fazie 5):
-`git rm -r --cached frontend/dist .agents .claude` + wpisy w `.gitignore` → przeniesienie `docs/` →
-`docs/lessons-learned.md` → włączyć GitHub secret scanning i push protection → `.env.example` →
-`README` z architekturą, linkiem do demo, sekcją bezpieczeństwa i **jawnym akapitem o metodzie
-pracy** (spec-first, TDD, whole-branch review, wsparcie AI) — skoro `git log` i tak to pokazuje,
-lepiej żeby narrację ustawiał README, a nie przypadkowy trailer w commicie → `SECURITY.md` →
-ponowny skan historii pod kątem sekretów → dopiero potem `gh repo edit --visibility public`.
-
-**Przyszłe aplikacje Shopify/Woo: osobne repo**, nie monorepo. Inne środowiska uruchomieniowe, inne
-cykle wydawnicze, osobne procesy review w app-store'ach; będą klientami API tego backendu, nie będą
-współdzielić kodu Pythona. Do CV trzy skupione repo czytają się lepiej niż jedno rozlazłe.
-
 ## Tryb demo
 
-Rekruter wchodzi na stronę, wybiera jedną z **3 gotowych próbek** (technologia / zabawki / kuchnia),
+Odwiedzający wchodzi na stronę, wybiera jedną z **3 gotowych próbek** (technologia / zabawki / kuchnia),
 klika i widzi realny skan kończący się raportem — **bez zakładania konta i bez własnego klucza**.
 
 Ograniczenia wymuszone przez limit 250 RPD na kluczu operatora:
@@ -125,7 +77,7 @@ Ograniczenia wymuszone przez limit 250 RPD na kluczu operatora:
   Tryb demo **nie może** przyjmować wgranego CSV ani żadnego wejścia od użytkownika; inaczej dowolna
   osoba spali Twój klucz w 8 minut. To jest wymóg bezpieczeństwa, nie wygody.
 - **Globalny cache pracuje tutaj na naszą korzyść**: pierwszy przebieg każdej próbki go zapełnia,
-  każdy kolejny rekruter dostaje wynik natychmiast i za zero żądań. Próbki należy **rozgrzać raz po
+  każdy kolejny odwiedzający dostaje wynik natychmiast i za zero żądań. Próbki należy **rozgrzać raz po
   deployu**, żeby pierwsze kliknięcie nigdy nie trafiło w zimny cache.
 - **Dzienny budżet demo** w `provider_usage` (osobna pseudo-connection operatora) + cap per IP.
   Po wyczerpaniu budżetu demo serwuje ostatni zapisany raport zamiast odmawiać.
@@ -144,7 +96,7 @@ Mapowanie typów — trzy pułapki, każda z regresją do napisania **przed** SQ
 
 | Dziś | Docelowo | Uwaga |
 |---|---|---|
-| pieniądze jako `TEXT` ↔ `Decimal` | `numeric` **bez skali** | `numeric(14,2)` po cichu zaokrągla — dokładnie klasa błędu z `.claude/rules/money.md`. psycopg3 mapuje `numeric ↔ Decimal` dokładnie. |
+| pieniądze jako `TEXT` ↔ `Decimal` | `numeric` **bez skali** | `numeric(14,2)` po cichu zaokrągla — dokładnie klasa błędu opisana w `CLAUDE.md`. psycopg3 mapuje `numeric ↔ Decimal` dokładnie. |
 | znaczniki czasu jako `REAL` epoch | `timestamptz` | **Domenowo zostaje `float`**: `to_timestamp($n)` przy zapisie, `extract(epoch ...)` przy odczycie. `staleness.py:23-33` liczy na floatach i zostaje nietknięte. |
 | `INSERT OR REPLACE` (`sqlite_cache.py:113,121`) | `ON CONFLICT DO UPDATE` | **Nie jest równoważne.** `OR REPLACE` kasuje wiersz, więc negatywny wpis zeruje 8 kolumn; `DO UPDATE` nie — nieaktualna oferta przetrwałaby i została podana jako realna cena. `DO UPDATE SET` musi jawnie nullować `price, currency, seller, source_url, delivery_days, confidence, citations`. |
 
@@ -313,7 +265,7 @@ upload i 72 747 dataclass w pamięci; ~$2–4/mies.), projekt Vercel, **pierwszy
   wyczerpaniu budżetu demo nadal pokazuje raport.
 - **Faza 5 dodatkowo:** `/security-review` na całości **przed** przełączeniem repo na publiczne,
   plus ponowny skan historii pod kątem sekretów.
-- **Przed każdym mergem fazy:** subagent `repo-reviewer` (wymóg `CLAUDE.md` tego repo — każdy błąd,
+- **Przed każdym mergem fazy:** przegląd całej gałęzi (wymóg `CLAUDE.md` tego repo — każdy błąd,
   który tu miał znaczenie, złapał whole-branch review, żaden nie `npm test`). Uwaga dla niego:
   zweryfikowane non-finding *„`asyncio.to_thread(create_scan, ...)` nie wprowadza błędu
   wielowątkowości SQLite"* **staje się nieaktualne z chwilą wejścia Postgresa** — jedno połączenie
@@ -331,7 +283,7 @@ upload i 72 747 dataclass w pamięci; ~$2–4/mies.), projekt Vercel, **pierwszy
    szyfrowanie w spoczynku, nie kompartmentalizację. Rejestracja na zaproszenie (1) mocno ogranicza
    skutki, bo „cudze klucze" to garstka zaproszonych osób.
 3. **Klucz operatora w trybie demo (12) łamie czystą regułę „BYOK obowiązkowy".** To świadomy
-   wyjątek na rzecz CV. Cały jego ciężar spoczywa na tym, że próbki są sztywne po stronie serwera —
+   wyjątek na rzecz demo. Cały jego ciężar spoczywa na tym, że próbki są sztywne po stronie serwera —
    gdyby demo kiedykolwiek przyjęło wejście od użytkownika, staje się darmową bramką do Twojego
    klucza. To musi być komentarzem w kodzie, nie tylko zdaniem w planie.
 4. **Free tier Supabase to pas startowy.** Ściana przy 10–15 kontach z pełnym skanem. Przy
@@ -339,7 +291,5 @@ upload i 72 747 dataclass w pamięci; ~$2–4/mies.), projekt Vercel, **pierwszy
 
 ## Ścieżka wykonania
 
-Po zatwierdzeniu: Faza 0 (spike) → zapis specyfikacji do
-`docs/superpowers/specs/2026-08-28-cloud-byok-auth-design.md` → `superpowers:writing-plans` per faza
-→ wykonanie **Subagent-Driven** (domyślne w tym workspace), worktree per faza, `repo-reviewer` przed
-każdym mergem.
+Po zatwierdzeniu: Faza 0 (spike) → zapis specyfikacji, potem plan wykonawczy per faza, osobny
+worktree na fazę i przegląd całej gałęzi przed każdym mergem.

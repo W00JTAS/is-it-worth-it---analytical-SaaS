@@ -1,7 +1,5 @@
 # Phase 6a — Visual foundation + shell — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Stand up the design-token foundation (shadcn/ui "Mono" theme + custom success/warning
 accents, Geist Mono font, light-default/dark-toggle mechanism) and a new wizard-wide shell
 (collapsible icon sidebar with the 5 wizard steps), replacing `App.tsx`'s bare full-screen step swap

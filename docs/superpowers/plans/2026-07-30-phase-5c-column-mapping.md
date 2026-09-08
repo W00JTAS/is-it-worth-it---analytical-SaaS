@@ -1,7 +1,5 @@
 # Phase 5c — Column-Mapping Correction Screen Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Insert a column-mapping correction screen (`Upload → Mapping → Scope+Estimate → Progress
 → Report`) so a user can see and fix how the CSV's columns map to name/wholesale price/EAN/category
 before any scan is created — closing the deliberate deferral from Phase 4.
@@ -98,18 +96,15 @@ def test_partial_detection_returns_none_for_missing_required_fields():
     mapping = detect_column_mapping_partial(["Nazwa", "Kategoria"])
     assert mapping == ColumnMapping(name="Nazwa", wholesale_price=None, ean=None, category="Kategoria")
 
-
 def test_partial_detection_never_raises_when_nothing_matches():
     mapping = detect_column_mapping_partial(["Foo", "Bar"])
     assert mapping == ColumnMapping(name=None, wholesale_price=None, ean=None, category=None)
-
 
 def test_partial_detection_matches_everything_when_fully_detectable():
     mapping = detect_column_mapping_partial(["Nazwa", "Cena hurtowa", "EAN", "Kategoria"])
     assert mapping == ColumnMapping(
         name="Nazwa", wholesale_price="Cena hurtowa", ean="EAN", category="Kategoria"
     )
-
 
 def test_partial_detection_detects_sku_the_same_way_as_full_detection():
     mapping = detect_column_mapping_partial(["SKU", "ean", "nazwa", "kategoria", "cena"])
@@ -212,7 +207,6 @@ CSV_BYTES = (
     "Produkt B;abc;;Dom\n"
 ).encode("utf-8")
 
-
 def test_build_preview_with_full_auto_detection():
     preview = build_csv_preview(CSV_BYTES, tenant_id="t1", mapping_override=None)
 
@@ -226,7 +220,6 @@ def test_build_preview_with_full_auto_detection():
     assert preview.warning_count == 1
     assert preview.sample_rows[0]["nazwa"] == "Produkt A"
 
-
 def test_build_preview_with_partial_override():
     # ean is explicitly given (even though it would auto-detect the same way here);
     # the rest are left None and fall back to auto-detection.
@@ -237,7 +230,6 @@ def test_build_preview_with_partial_override():
     assert preview.mapping == ColumnMapping(
         name="nazwa", wholesale_price="cena", ean="ean", category="kategoria"
     )
-
 
 def test_build_preview_when_required_field_cannot_be_resolved():
     csv_bytes = ("nazwa;kategoria\nProdukt A;Elektronika\n").encode("utf-8")
@@ -253,11 +245,9 @@ def test_build_preview_when_required_field_cannot_be_resolved():
     assert preview.headers == ["nazwa", "kategoria"]
     assert preview.sample_rows[0]["nazwa"] == "Produkt A"
 
-
 def test_build_preview_raises_empty_csv_error_for_missing_header():
     with pytest.raises(EmptyCsvError):
         build_csv_preview(b"", tenant_id="t1", mapping_override=None)
-
 
 def test_build_preview_caps_sample_rows_and_warnings():
     header = "nazwa;cena;ean;kategoria\n"
@@ -294,7 +284,6 @@ from app.sources.csv_source import CsvCatalogSource, EmptyCsvError
 SAMPLE_ROW_LIMIT = 10
 WARNING_LIMIT = 20
 
-
 @dataclass(frozen=True)
 class CsvPreview:
     headers: list[str]
@@ -304,7 +293,6 @@ class CsvPreview:
     parsed_count: int
     warnings: list[str]
     warning_count: int
-
 
 def _merge_mapping(override: ColumnMapping | None, detected: ColumnMapping) -> ColumnMapping:
     if override is None:
@@ -316,7 +304,6 @@ def _merge_mapping(override: ColumnMapping | None, detected: ColumnMapping) -> C
         category=override.category or detected.category,
         sku=override.sku or detected.sku,
     )
-
 
 def build_csv_preview(
     csv_bytes: bytes, tenant_id: str, mapping_override: ColumnMapping | None
@@ -412,7 +399,6 @@ def test_csv_preview_returns_auto_detected_mapping_and_sample_rows(tmp_path):
     assert body["parsed_count"] == 1
     assert body["sample_rows"][0]["nazwa"] == "Produkt A"
 
-
 def test_csv_preview_returns_null_for_unresolved_field_instead_of_400(tmp_path):
     app, store, cache = _make_app(tmp_path)
     client = TestClient(app)
@@ -427,7 +413,6 @@ def test_csv_preview_returns_null_for_unresolved_field_instead_of_400(tmp_path):
     assert body["mapping"]["wholesale_price"] is None
     assert body["mapping"]["ean"] is None
     assert body["parsed_count"] == 0
-
 
 def test_csv_preview_honors_a_full_mapping_override(tmp_path):
     app, store, cache = _make_app(tmp_path)
@@ -453,7 +438,6 @@ def test_csv_preview_honors_a_full_mapping_override(tmp_path):
     assert body["mapping"]["wholesale_price"] == "ean"
     assert body["mapping"]["ean"] == "cena"
 
-
 def test_csv_preview_rejects_partial_mapping_subset(tmp_path):
     app, store, cache = _make_app(tmp_path)
     client = TestClient(app)
@@ -465,7 +449,6 @@ def test_csv_preview_rejects_partial_mapping_subset(tmp_path):
     )
 
     assert response.status_code == 400
-
 
 def test_csv_preview_rejects_empty_csv_file(tmp_path):
     app, store, cache = _make_app(tmp_path)
@@ -516,7 +499,6 @@ def _csv_preview_to_dict(preview: CsvPreview) -> dict:
         "warnings": preview.warnings,
         "warning_count": preview.warning_count,
     }
-
 
 def _column_mapping_from_form(
     name_column: str | None,
@@ -632,7 +614,6 @@ def test_post_scans_honors_a_full_mapping_override(tmp_path):
     # not the auto-detected "cena" column (value "10,00") -- proves the override won.
     assert pending[0].product.wholesale_price == Decimal("99.00")
 
-
 def test_post_scans_rejects_partial_mapping_subset(tmp_path):
     app, store, cache = _make_app(tmp_path)
     client = TestClient(app)
@@ -644,7 +625,6 @@ def test_post_scans_rejects_partial_mapping_subset(tmp_path):
     )
 
     assert response.status_code == 400
-
 
 def test_post_scans_still_works_with_no_mapping_fields(tmp_path):
     # Backward compatibility: existing callers that never supply a mapping
@@ -678,7 +658,6 @@ In `backend/app/scans/orchestration.py`, add the import and the new parameter:
 ```python
 from app.sources.column_mapping import ColumnMapping
 from app.sources.csv_source import CsvCatalogSource
-
 
 def create_scan(
     *,

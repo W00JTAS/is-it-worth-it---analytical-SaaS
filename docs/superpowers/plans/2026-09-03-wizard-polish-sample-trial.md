@@ -1,7 +1,5 @@
 # Wizard Polish + Sample-Trial Entry Point Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Restyle the existing 5-step wizard for a normal widescreen desktop (not the narrow/tall
 layout it inherited), fix the AppShell title, MappingStep and ScopeEstimateStep's concrete UX
 problems, and add a zero-setup "try it on a sample" entry point using 3 real 25-product samples
@@ -25,11 +23,11 @@ bundled one.
 - Target viewport for layout decisions: a normal widescreen desktop monitor (reference 2560×1440),
   not a narrow/tall one. Containers may grow past today's `max-w-md`/`max-w-3xl`, never full-bleed.
 - `MappingStep` keeps its native `<select>` elements — do not swap to shadcn's `Select` (breaks
-  `userEvent.selectOptions()`-based tests, see `.claude/rules/frontend-ui.md`).
+  `userEvent.selectOptions()`-based tests).
 - Every new `data-*:` Tailwind variant must use the bracketed value form
   (`group-data-[collapsible=icon]:...`), never a bare presence form
   (`group-data-collapsible-icon:...`) — the latter silently no-ops against Radix's
-  attribute-value pairs. See `.claude/rules/frontend-ui.md`.
+  attribute-value pairs.
 - `npm run build` (`tsc -b`) is mandatory before any task is considered done, not just `npm test`.
 - No backend change of any kind in this plan.
 - No new runtime dependency beyond `npx shadcn add collapsible` (Task 7).
@@ -652,8 +650,7 @@ git commit -m "feat(paginated-list): support a 2-column layout, use it for mappi
 
 Run: `cd frontend && npx shadcn add collapsible`
 
-Then run the repo's mandatory bare-`data-*` check (per `.claude/rules/frontend-ui.md`) even though
-the `PostToolUse` hook should already have run it:
+Then run the repo's mandatory bare-`data-*` check:
 
 Run: `grep -rnoE '[a-z-]*data-[a-z0-9-]+(/[a-zA-Z0-9_-]+)?:' frontend/src/components/ui/collapsible.tsx | grep -v 'data-\['`
 Expected: no output (no bare `data-*:` variant in the generated file). If this prints anything,
@@ -791,7 +788,7 @@ Note: `Button`'s `variant="ghost"` matches this file's existing import of `Butto
 `@/components/ui/button` — no new import needed for that. The `group`/`group-data-[state=open]:`
 pair on the chevron follows the bracketed-variant rule from Global Constraints — Radix's
 `Collapsible.Trigger` sets `data-state="open"|"closed"`, an attribute-**value** pair, so the bare
-form would silently no-op here exactly as described in `.claude/rules/frontend-ui.md`.
+form would silently no-op here, exactly as the Global Constraints describe.
 
 Widen the result box: change (today's line 210):
 
@@ -1216,7 +1213,7 @@ git commit -m "feat(app): wire sample-trial cards to skip mapping and land on sc
   turn and confirm each lands directly on `ScopeEstimateStep` with "Zakres skanu" showing, and that
   "Ustawienia zaawansowane" is collapsed by default; (c) hover the sidebar collapsed/expanded and
   confirm the "IS?" ⇄ "IS IT WORTH IT?" reveal animates smoothly.
-- [ ] Per this repo's standing rule (`IS_IT_WORTH_IT/CLAUDE.md`), run the `repo-reviewer` subagent
-  for a whole-branch review before merging — this plan's own task-level reviews check conformance
+- [ ] Per this repo's standing rule (`CLAUDE.md`), review the whole branch
+  before merging — this plan's own task-level reviews check conformance
   to *this plan*, not independently against the codebase, which is exactly the gap that rule exists
   to close.

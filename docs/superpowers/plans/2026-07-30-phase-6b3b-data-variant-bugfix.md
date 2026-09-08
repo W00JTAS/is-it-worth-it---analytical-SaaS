@@ -1,7 +1,5 @@
 # Phase 6b-3b — Fix bare data-variant bugs in scroll-area/separator/sheet — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Fix a real, confirmed rendering bug shipped in Phase 6a and still live on `master`: three
 shadcn-generated components (`scroll-area.tsx`, `separator.tsx`, `sheet.tsx`) use bare Tailwind
 `data-*:` variants (which compile to attribute-*presence* selectors) that don't match the actual

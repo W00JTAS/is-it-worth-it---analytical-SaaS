@@ -1,7 +1,5 @@
 # Phase 4 — Job Engine Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Build the asynchronous, resumable, concurrency-limited scan engine that turns an
 uploaded CSV catalog into a persisted set of price lookups against Perplexity, with a
 cost/time estimate shown before any money is spent, a two-step start (estimate, then confirm),
@@ -118,7 +116,6 @@ def test_provider_unavailable_propagates_and_is_not_cached(tmp_path):
     assert provider.call_count == 2
     cache.close()
 
-
 def test_provider_unavailable_propagates_for_product_without_ean(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
     provider = _UnavailableProvider()
@@ -149,7 +146,6 @@ from __future__ import annotations
 from app.cache.sqlite_cache import PriceCache
 from app.models.product import Product
 from app.providers.base import OfferResult, PriceProvider
-
 
 def get_offer_cached(
     product: Product,
@@ -214,7 +210,6 @@ def test_invalidate_removes_a_cached_entry(tmp_path):
 
     assert cache.get("5901234123457", "PL", "perplexity", 5) is None
     cache.close()
-
 
 def test_invalidate_on_missing_entry_is_a_no_op(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
@@ -308,7 +303,6 @@ from app.scans.models import (
     StalenessReport,
 )
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1", source="csv", external_id="1", variant_id=None,
@@ -317,7 +311,6 @@ def _make_product(**overrides) -> Product:
     )
     defaults.update(overrides)
     return Product(**defaults)
-
 
 def _make_estimate(**overrides) -> CostEstimate:
     defaults = dict(
@@ -328,19 +321,16 @@ def _make_estimate(**overrides) -> CostEstimate:
     defaults.update(overrides)
     return CostEstimate(**defaults)
 
-
 def test_scan_status_values():
     assert ScanStatus.ESTIMATED.value == "estimated"
     assert ScanStatus.RUNNING.value == "running"
     assert ScanStatus.DONE.value == "done"
     assert ScanStatus.FAILED.value == "failed"
 
-
 def test_product_status_values():
     assert ProductStatus.PENDING.value == "pending"
     assert ProductStatus.DONE.value == "done"
     assert ProductStatus.SKIPPED.value == "skipped"
-
 
 def test_scan_holds_all_fields():
     scan = Scan(
@@ -356,7 +346,6 @@ def test_scan_holds_all_fields():
     assert scan.sample_per_category == 50
     assert scan.estimate.queries_without_refresh == 10
 
-
 def test_scan_product_record_holds_all_fields():
     product = _make_product()
     record = ScanProductRecord(
@@ -369,7 +358,6 @@ def test_scan_product_record_holds_all_fields():
     assert record.status == ProductStatus.PENDING
     assert record.was_stale is False
     assert record.offer is None
-
 
 def test_staleness_report_holds_fields():
     report = StalenessReport(overlapping_count=3, stale_external_ids=("1", "2"))
@@ -399,19 +387,16 @@ from enum import Enum
 from app.models.product import Product
 from app.providers.base import OfferResult
 
-
 class ScanStatus(str, Enum):
     ESTIMATED = "estimated"
     RUNNING = "running"
     DONE = "done"
     FAILED = "failed"
 
-
 class ProductStatus(str, Enum):
     PENDING = "pending"
     DONE = "done"
     SKIPPED = "skipped"
-
 
 @dataclass(frozen=True)
 class CostEstimate:
@@ -422,12 +407,10 @@ class CostEstimate:
     seconds_without_refresh: float
     seconds_with_refresh: float
 
-
 @dataclass(frozen=True)
 class StalenessReport:
     overlapping_count: int
     stale_external_ids: tuple[str, ...]
-
 
 @dataclass(frozen=True)
 class Scan:
@@ -443,7 +426,6 @@ class Scan:
     completed_products: int
     estimate: CostEstimate
     created_at: float
-
 
 @dataclass(frozen=True)
 class ScanProductRecord:
@@ -494,7 +476,6 @@ from decimal import Decimal
 from app.models.product import Product
 from app.scans.sampling import resolve_sample_scope
 
-
 def _make_products(category: str, count: int, start: int = 0) -> list[Product]:
     return [
         Product(
@@ -505,7 +486,6 @@ def _make_products(category: str, count: int, start: int = 0) -> list[Product]:
         for i in range(start, start + count)
     ]
 
-
 def test_exact_fit_takes_target_from_each_category():
     products_by_category = {
         "A": _make_products("A", 50),
@@ -515,7 +495,6 @@ def test_exact_fit_takes_target_from_each_category():
     result = resolve_sample_scope(products_by_category, target_per_category=50, seed=1)
 
     assert len(result) == 100
-
 
 def test_short_category_donates_shortfall_to_pool_evenly():
     # A has only 20 (target 50) -> shortfall of 30 goes into the pool, split evenly
@@ -536,7 +515,6 @@ def test_short_category_donates_shortfall_to_pool_evenly():
     assert by_category["B"] == 65  # 50 + 15 from the pool
     assert by_category["C"] == 65  # 50 + 15 from the pool
     assert len(result) == 150
-
 
 def test_uneven_pool_remainder_is_dropped_deterministically():
     # A has 0 (shortfall = target, e.g. 10) -> pool = 10, split between 3
@@ -560,7 +538,6 @@ def test_uneven_pool_remainder_is_dropped_deterministically():
     assert by_category["C"] == 13  # 10 + 3 (share)
     assert by_category["D"] == 13  # 10 + 3 (share)
     assert len(result) == 40
-
 
 def test_multi_round_redistribution_when_a_category_overflows_its_own_size():
     # A: 0 (shortfall 10). B: 12 (just over target of 10, only 2 spare capacity).
@@ -586,7 +563,6 @@ def test_multi_round_redistribution_when_a_category_overflows_its_own_size():
     assert by_category["C"] == 18
     assert len(result) == 30
 
-
 def test_same_seed_gives_same_sample_twice():
     products_by_category = {"A": _make_products("A", 200)}
 
@@ -594,7 +570,6 @@ def test_same_seed_gives_same_sample_twice():
     second = resolve_sample_scope(products_by_category, target_per_category=10, seed=42)
 
     assert [p.external_id for p in first] == [p.external_id for p in second]
-
 
 def test_different_seed_can_give_a_different_sample():
     products_by_category = {"A": _make_products("A", 200)}
@@ -622,7 +597,6 @@ from __future__ import annotations
 import random
 
 from app.models.product import Product
-
 
 def resolve_sample_scope(
     products_by_category: dict[str, list[Product]],
@@ -711,7 +685,6 @@ from decimal import Decimal
 
 from app.scans.estimate import COST_PER_QUERY_USD, SECONDS_PER_QUERY, estimate_cost
 
-
 def test_estimate_with_no_misses_and_no_stale_is_free_and_instant():
     result = estimate_cost(cache_misses=0, stale_count=0, max_concurrency=5)
 
@@ -722,7 +695,6 @@ def test_estimate_with_no_misses_and_no_stale_is_free_and_instant():
     assert result.seconds_without_refresh == 0.0
     assert result.seconds_with_refresh == 0.0
 
-
 def test_estimate_scales_with_query_count_and_concurrency():
     result = estimate_cost(cache_misses=100, stale_count=20, max_concurrency=10)
 
@@ -732,7 +704,6 @@ def test_estimate_scales_with_query_count_and_concurrency():
     assert result.cost_usd_with_refresh == (COST_PER_QUERY_USD * 120).quantize(Decimal("0.01"))
     assert result.seconds_without_refresh == (100 / 10) * SECONDS_PER_QUERY
     assert result.seconds_with_refresh == (120 / 10) * SECONDS_PER_QUERY
-
 
 def test_estimate_with_refresh_is_never_cheaper_than_without():
     result = estimate_cost(cache_misses=50, stale_count=5, max_concurrency=5)
@@ -767,7 +738,6 @@ COST_PER_QUERY_USD = Decimal("0.010")
 # (~2.36s for one request); used only for the pre-scan time estimate, not a
 # guaranteed throughput figure.
 SECONDS_PER_QUERY = 2.5
-
 
 def estimate_cost(cache_misses: int, stale_count: int, max_concurrency: int) -> CostEstimate:
     queries_without_refresh = cache_misses
@@ -832,7 +802,6 @@ from app.models.product import Product
 from app.providers.base import OfferResult
 from app.scans.staleness import analyze_staleness
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1", source="csv", external_id="1", variant_id=None,
@@ -841,7 +810,6 @@ def _make_product(**overrides) -> Product:
     )
     defaults.update(overrides)
     return Product(**defaults)
-
 
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
@@ -853,7 +821,6 @@ def _make_offer(**overrides) -> OfferResult:
     defaults.update(overrides)
     return OfferResult(**defaults)
 
-
 def test_product_with_no_prior_cache_entry_is_not_overlapping(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
     product = _make_product()
@@ -863,7 +830,6 @@ def test_product_with_no_prior_cache_entry_is_not_overlapping(tmp_path):
     assert report.overlapping_count == 0
     assert report.stale_external_ids == ()
     cache.close()
-
 
 def test_product_with_fresh_cache_entry_overlaps_but_is_not_stale(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
@@ -875,7 +841,6 @@ def test_product_with_fresh_cache_entry_overlaps_but_is_not_stale(tmp_path):
     assert report.overlapping_count == 1
     assert report.stale_external_ids == ()
     cache.close()
-
 
 def test_product_with_old_cache_entry_is_stale(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
@@ -894,7 +859,6 @@ def test_product_with_old_cache_entry_is_stale(tmp_path):
     assert report.overlapping_count == 1
     assert report.stale_external_ids == (product.external_id,)
     cache.close()
-
 
 def test_product_without_ean_is_never_counted(tmp_path):
     cache = PriceCache(tmp_path / "cache.sqlite3")
@@ -923,7 +887,6 @@ import time
 from app.cache.sqlite_cache import PriceCache
 from app.models.product import Product
 from app.scans.models import StalenessReport
-
 
 def analyze_staleness(
     products: list[Product],
@@ -1009,7 +972,6 @@ from app.scans.estimate import estimate_cost
 from app.scans.models import ProductStatus, ScanStatus
 from app.scans.store import ScanStore
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1", source="csv", external_id="1", variant_id=None,
@@ -1018,7 +980,6 @@ def _make_product(**overrides) -> Product:
     )
     defaults.update(overrides)
     return Product(**defaults)
-
 
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
@@ -1029,7 +990,6 @@ def _make_offer(**overrides) -> OfferResult:
     )
     defaults.update(overrides)
     return OfferResult(**defaults)
-
 
 def test_create_scan_persists_scan_and_products(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
@@ -1055,7 +1015,6 @@ def test_create_scan_persists_scan_and_products(tmp_path):
     assert all(p.status == ProductStatus.PENDING for p in pending)
     store.close()
 
-
 def test_stale_products_are_flagged_on_creation(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     products = [_make_product(external_id="1"), _make_product(external_id="2")]
@@ -1072,12 +1031,10 @@ def test_stale_products_are_flagged_on_creation(tmp_path):
     assert pending["2"].was_stale is True
     store.close()
 
-
 def test_get_scan_returns_none_for_unknown_id(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     assert store.get_scan("does-not-exist") is None
     store.close()
-
 
 def test_start_scan_sets_status_running(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
@@ -1092,7 +1049,6 @@ def test_start_scan_sets_status_running(tmp_path):
 
     assert store.get_scan(scan_id).status == ScanStatus.RUNNING
     store.close()
-
 
 def test_mark_done_updates_status_offer_and_progress_count(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
@@ -1111,7 +1067,6 @@ def test_mark_done_updates_status_offer_and_progress_count(tmp_path):
     assert store.get_scan(scan_id).completed_products == 1
     store.close()
 
-
 def test_mark_skipped_updates_status_and_progress_without_counting_as_pending(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     estimate = estimate_cost(cache_misses=0, stale_count=1, max_concurrency=5)
@@ -1129,7 +1084,6 @@ def test_mark_skipped_updates_status_and_progress_without_counting_as_pending(tm
     assert store.get_scan(scan_id).completed_products == 1
     store.close()
 
-
 def test_finalize_scan_is_done_when_nothing_pending(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5)
@@ -1144,7 +1098,6 @@ def test_finalize_scan_is_done_when_nothing_pending(tmp_path):
 
     assert store.get_scan(scan_id).status == ScanStatus.DONE
     store.close()
-
 
 def test_finalize_scan_is_failed_when_products_still_pending(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
@@ -1191,7 +1144,6 @@ from app.scans.models import (
     ScanProductRecord,
     ScanStatus,
 )
-
 
 class ScanStore:
     def __init__(self, db_path: str | Path):
@@ -1474,7 +1426,6 @@ CSV_BYTES = (
     "Produkt B;20,00;5900000000009;Dom\n"
 ).encode("utf-8")
 
-
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
         price=Decimal("15.00"), currency="PLN", seller="Example Shop",
@@ -1484,7 +1435,6 @@ def _make_offer(**overrides) -> OfferResult:
     )
     defaults.update(overrides)
     return OfferResult(**defaults)
-
 
 def test_create_scan_full_scope_persists_all_products_and_estimates_cost(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
@@ -1504,7 +1454,6 @@ def test_create_scan_full_scope_persists_all_products_and_estimates_cost(tmp_pat
     store.close()
     cache.close()
 
-
 def test_create_scan_detects_overlap_and_staleness_against_existing_cache(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
     cache = PriceCache(tmp_path / "app.sqlite3")
@@ -1521,7 +1470,6 @@ def test_create_scan_detects_overlap_and_staleness_against_existing_cache(tmp_pa
     assert scan.estimate.queries_without_refresh == 1
     store.close()
     cache.close()
-
 
 def test_create_scan_sample_scope_applies_water_filling(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
@@ -1559,7 +1507,6 @@ from app.scans.sampling import resolve_sample_scope
 from app.scans.staleness import analyze_staleness
 from app.scans.store import ScanStore
 from app.sources.csv_source import CsvCatalogSource
-
 
 def create_scan(
     *,
@@ -1673,7 +1620,6 @@ from app.scans.estimate import estimate_cost
 from app.scans.models import ProductStatus, ScanStatus
 from app.scans.store import ScanStore
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1", source="csv", external_id="1", variant_id=None,
@@ -1682,7 +1628,6 @@ def _make_product(**overrides) -> Product:
     )
     defaults.update(overrides)
     return Product(**defaults)
-
 
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
@@ -1693,7 +1638,6 @@ def _make_offer(**overrides) -> OfferResult:
     )
     defaults.update(overrides)
     return OfferResult(**defaults)
-
 
 class _ScriptedProvider:
     """Returns/raises the next item in `script` for each product's EAN, in
@@ -1719,7 +1663,6 @@ class _ScriptedProvider:
         finally:
             self._in_flight -= 1
 
-
 def _make_store_with_products(tmp_path, products, *, max_concurrency=5):
     store = ScanStore(tmp_path / "app.sqlite3")
     estimate = estimate_cost(cache_misses=len(products), stale_count=0, max_concurrency=max_concurrency)
@@ -1729,7 +1672,6 @@ def _make_store_with_products(tmp_path, products, *, max_concurrency=5):
         products=products, stale_external_ids=(), estimate=estimate,
     )
     return store, scan_id
-
 
 def test_run_scan_marks_all_products_done_and_finalizes(tmp_path):
     products = [_make_product(external_id="1", ean="5901234123457")]
@@ -1744,7 +1686,6 @@ def test_run_scan_marks_all_products_done_and_finalizes(tmp_path):
     assert store.get_scan(scan_id).completed_products == 1
     store.close()
     cache.close()
-
 
 def test_run_scan_leaves_transiently_failed_products_pending_and_marks_scan_failed(tmp_path):
     products = [
@@ -1766,7 +1707,6 @@ def test_run_scan_leaves_transiently_failed_products_pending_and_marks_scan_fail
     assert store.get_scan(scan_id).status == ScanStatus.FAILED
     store.close()
     cache.close()
-
 
 def test_run_scan_can_be_called_again_to_resume_remaining_pending(tmp_path):
     products = [
@@ -1790,7 +1730,6 @@ def test_run_scan_can_be_called_again_to_resume_remaining_pending(tmp_path):
     assert recovered_provider.call_count == 1  # only the still-pending product was retried
     store.close()
     cache.close()
-
 
 def test_run_scan_never_exceeds_max_concurrency(tmp_path):
     products = [
@@ -1833,7 +1772,6 @@ from app.cache.sqlite_cache import PriceCache
 from app.providers.base import PriceProvider, ProviderUnavailable
 from app.providers.lookup import get_offer_cached
 from app.scans.store import ScanStore
-
 
 async def run_scan(
     scan_id: str,
@@ -1923,7 +1861,6 @@ CSV_BYTES = (
     "Produkt A;10,00;5901234123457;Elektronika\n"
 ).encode("utf-8")
 
-
 class _FakeProvider:
     name = "perplexity"
 
@@ -1933,7 +1870,6 @@ class _FakeProvider:
             seller="Shop", source_url="https://example.com/x", delivery_days=2,
             confidence=0.9, citations=(), raw_response="{}",
         )
-
 
 def _make_app(tmp_path):
     app = FastAPI()
@@ -1945,7 +1881,6 @@ def _make_app(tmp_path):
     app.dependency_overrides[get_cache] = lambda: cache
     app.dependency_overrides[get_provider] = lambda: provider
     return app, store, cache
-
 
 def test_post_scans_creates_an_estimated_scan_without_starting_it(tmp_path):
     app, store, cache = _make_app(tmp_path)
@@ -1964,7 +1899,6 @@ def test_post_scans_creates_an_estimated_scan_without_starting_it(tmp_path):
     assert "estimate" in body
     assert store.get_scan(body["scan_id"]).status.value == "estimated"
 
-
 def test_get_scans_returns_404_for_unknown_id(tmp_path):
     app, store, cache = _make_app(tmp_path)
     client = TestClient(app)
@@ -1972,7 +1906,6 @@ def test_get_scans_returns_404_for_unknown_id(tmp_path):
     response = client.get("/scans/does-not-exist")
 
     assert response.status_code == 404
-
 
 def test_start_scan_runs_it_to_completion(tmp_path):
     app, store, cache = _make_app(tmp_path)
@@ -1989,7 +1922,6 @@ def test_start_scan_runs_it_to_completion(tmp_path):
     final = client.get(f"/scans/{scan_id}").json()
     assert final["status"] == "done"
     assert final["completed_products"] == 1
-
 
 def test_start_scan_returns_404_for_unknown_id(tmp_path):
     app, store, cache = _make_app(tmp_path)
@@ -2034,14 +1966,12 @@ _shared_store: ScanStore | None = None
 _shared_cache: PriceCache | None = None
 _shared_provider: PriceProvider | None = None
 
-
 def get_store() -> ScanStore:
     global _shared_store
     if _shared_store is None:
         DEFAULT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         _shared_store = ScanStore(DEFAULT_DB_PATH)
     return _shared_store
-
 
 def get_cache() -> PriceCache:
     global _shared_cache
@@ -2050,14 +1980,12 @@ def get_cache() -> PriceCache:
         _shared_cache = PriceCache(DEFAULT_DB_PATH)
     return _shared_cache
 
-
 def get_provider() -> PriceProvider:
     global _shared_provider
     if _shared_provider is None:
         import os
         _shared_provider = PerplexityProvider(api_key=os.environ["PERPLEXITY_API_KEY"])
     return _shared_provider
-
 
 def _estimate_to_dict(estimate) -> dict:
     return {
@@ -2069,7 +1997,6 @@ def _estimate_to_dict(estimate) -> dict:
         "seconds_with_refresh": estimate.seconds_with_refresh,
     }
 
-
 def _scan_to_dict(scan) -> dict:
     return {
         "scan_id": scan.id,
@@ -2080,13 +2007,11 @@ def _scan_to_dict(scan) -> dict:
         "estimate": _estimate_to_dict(scan.estimate),
     }
 
-
 def _sample_seed_from_csv(csv_bytes: bytes) -> int:
     # Deterministic per-upload seed derived from the file's actual content (not
     # just its length) so re-uploading the same file sample the same products;
     # not security-sensitive, just needs to be stable and content-dependent.
     return int(hashlib.sha256(csv_bytes).hexdigest()[:8], 16)
-
 
 @router.post("/scans")
 async def post_scans(
@@ -2112,10 +2037,8 @@ async def post_scans(
     scan = store.get_scan(scan_id)
     return _scan_to_dict(scan)
 
-
 class StartScanRequest(BaseModel):
     force_refresh_stale: bool
-
 
 @router.post("/scans/{scan_id}/start")
 async def start_scan(
@@ -2140,14 +2063,12 @@ async def start_scan(
     )
     return {"status": "running"}
 
-
 @router.get("/scans/{scan_id}")
 async def get_scan_status(scan_id: str, store: ScanStore = Depends(get_store)):
     scan = store.get_scan(scan_id)
     if scan is None:
         raise HTTPException(status_code=404, detail="scan not found")
     return _scan_to_dict(scan)
-
 
 @router.get("/scans/{scan_id}/events")
 async def stream_scan_events(scan_id: str, store: ScanStore = Depends(get_store)):

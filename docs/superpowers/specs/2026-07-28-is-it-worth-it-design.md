@@ -13,7 +13,7 @@ z uwzględnieniem kosztów → wydać raport, czy i przy jakiej marży ta wspó�
 Kluczowy warunek biznesowy: liczy się **oferta z realnym czasem dostawy** (domyślnie ≤ 5 dni). Tanie oferty
 płynące 2 miesiące z Chin są dla tej analizy bezwartościowe i muszą być odfiltrowane.
 
-Projekt jest greenfield — repo zawierało tylko `CLAUDE.md`, `.claude/` (skille design/impeccable) i `.gitignore`.
+Projekt jest greenfield — repo zawierało tylko `CLAUDE.md` i `.gitignore`.
 
 ### Decyzje podjęte w brainstormingu
 
@@ -132,34 +132,10 @@ klucz Perplexity". W aplikacji na Shopify to słaby UX — tam standardem jest r
 Billing API, a nie proszenie sklepu o klucz do zewnętrznego LLM-a. V1 zostaje przy własnym kluczu;
 decyzja o modelu rozliczeń zapada przy pracach nad integracją, nie teraz.
 
----
-
-## Meta-projekt: reguły, skille, subagenty
-
-`CLAUDE.md` tego projektu wymaga zaprojektowania ich **przed** kodem:
-
-**Reguły (`.claude/rules/`)**
-- `money.md` — `Decimal`, jawne waluty, zasady zaokrąglania
-- `provider-contract.md` — jak wygląda poprawny provider i jego kontrakt
-- `no-hallucinated-prices.md` — polityka z pkt 2 jako twarda reguła projektu
-
-**Skille (`.claude/skills/`)**
-- `add-price-provider` — krok po kroku dodanie nowego źródła cen (np. Allegro) zgodnie z kontraktem
-- `add-catalog-source` — dodanie nowego źródła produktów (WooCommerce, kolejna platforma). Design:
-  `2026-08-26-catalog-source-base-class-design.md` (wspólna warstwa normalizacji `BaseCatalogSource`
-  + sam skill, zanim powstanie trzecie źródło).
-- `cost-safety` — jak testować ścieżki LLM **bez** palenia realnych tokenów (mocki, nagrane odpowiedzi)
-
-**Subagenty (`.claude/agents/`)**
-- `report-analyst` — projektowanie i weryfikacja logiki agregacji/raportu
-- `provider-tester` — sprawdzanie zgodności providera z kontraktem na nagranych odpowiedziach
-
----
-
 ## Plan realizacji (na wysokim poziomie)
 
 Kolejność jest celowa: **wszystko, co da się zbudować bez wydawania pieniędzy na API, powstaje najpierw.**
-Faza po fazie szczegóły — patrz odpowiadający plan implementacyjny (writing-plans).
+Faza po fazie szczegóły — patrz odpowiadający plan implementacyjny w `docs/superpowers/plans/`.
 
 0. Scaffold (backend FastAPI, frontend Vite/React/TS/Tailwind, pytest, lint)
 1. CatalogSource (CSV) + Normalize — TDD, bez API
@@ -168,8 +144,6 @@ Faza po fazie szczegóły — patrz odpowiadający plan implementacyjny (writing
 4. Job engine (async, wznawialny, streaming postępu)
 5. Frontend (pełny przepływ ekranów + raport)
 6. Szkic `ShopifySource` (weryfikacja abstrakcji, bez OAuth/hostingu)
-7. Meta — spisanie reguł/skilli/subagentów z sekcji wyżej. Zrobione:
-   `2026-08-26-phase-7-meta-writeup.md` (plan vs. faktyczny stan, z uzasadnieniem rozbieżności).
 
 ## Weryfikacja końcowa
 

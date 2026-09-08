@@ -1,7 +1,5 @@
 # Phase 5b — Report Screen + Backend Margin Aggregation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Wire the already-existing, already-tested `calculate_margin_matrix` to real scan data:
 add a backend `reports/` module that turns a scan's cached offers into a margin verdict, two
 paginated/filterable read endpoints, and a new `ReportStep` screen that closes the wizard
@@ -129,7 +127,6 @@ COST_CONFIG = CostConfig(
     returns_pct=Decimal("0.02"),
 )
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1", source="csv", external_id="1", variant_id=None,
@@ -138,7 +135,6 @@ def _make_product(**overrides) -> Product:
     )
     defaults.update(overrides)
     return Product(**defaults)
-
 
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
@@ -149,13 +145,11 @@ def _make_offer(**overrides) -> OfferResult:
     defaults.update(overrides)
     return OfferResult(**defaults)
 
-
 def _make_record(*, status=ProductStatus.DONE, offer=None, **product_overrides) -> ScanProductRecord:
     return ScanProductRecord(
         id=1, scan_id="scan-1", product=_make_product(**product_overrides),
         status=status, was_stale=False, offer=offer,
     )
-
 
 def test_computable_product_gets_full_four_scenario_margin_matrix():
     record = _make_record(offer=_make_offer())
@@ -169,7 +163,6 @@ def test_computable_product_gets_full_four_scenario_margin_matrix():
     assert len(evaluation.margin_matrix) == 4
     assert evaluation.margin_matrix[2].scenario_pct == Decimal("0.00")
 
-
 def test_not_checked_when_status_is_pending():
     record = _make_record(status=ProductStatus.PENDING, offer=None)
 
@@ -179,14 +172,12 @@ def test_not_checked_when_status_is_pending():
     assert evaluation.exclusion_reason == ExclusionReason.NOT_CHECKED
     assert evaluation.margin_matrix is None
 
-
 def test_no_offer_when_done_but_offer_is_none():
     record = _make_record(status=ProductStatus.DONE, offer=None)
 
     evaluation = evaluate_record(record, COST_CONFIG)
 
     assert evaluation.exclusion_reason == ExclusionReason.NO_OFFER
-
 
 def test_currency_mismatch_when_offer_currency_differs_from_product_currency():
     record = _make_record(offer=_make_offer(currency="EUR"))
@@ -196,7 +187,6 @@ def test_currency_mismatch_when_offer_currency_differs_from_product_currency():
     assert evaluation.exclusion_reason == ExclusionReason.CURRENCY_MISMATCH
     assert evaluation.margin_matrix is None
 
-
 def test_anomaly_flag_set_for_below_wholesale_offer():
     record = _make_record(wholesale_price=Decimal("200.00"), offer=_make_offer(price=Decimal("100.00")))
 
@@ -204,7 +194,6 @@ def test_anomaly_flag_set_for_below_wholesale_offer():
 
     assert evaluation.exclusion_reason == ExclusionReason.ANOMALY
     assert evaluation.anomaly_flag == AnomalyFlag.BELOW_WHOLESALE
-
 
 def test_anomaly_flag_set_for_low_confidence_offer():
     record = _make_record(offer=_make_offer(confidence=0.2))
@@ -237,13 +226,11 @@ from app.pricing.margin import CostConfig, MarginResult, calculate_margin_matrix
 from app.providers.anomaly import AnomalyFlag, detect_anomaly
 from app.scans.models import ProductStatus, ScanProductRecord
 
-
 class ExclusionReason(str, Enum):
     NOT_CHECKED = "not_checked"
     NO_OFFER = "no_offer"
     CURRENCY_MISMATCH = "currency_mismatch"
     ANOMALY = "anomaly"
-
 
 @dataclass(frozen=True)
 class ProductEvaluation:
@@ -253,13 +240,11 @@ class ProductEvaluation:
     anomaly_flag: AnomalyFlag | None
     margin_matrix: tuple[MarginResult, ...] | None
 
-
 def _excluded(record: ScanProductRecord, reason: ExclusionReason, anomaly_flag: AnomalyFlag | None = None) -> ProductEvaluation:
     return ProductEvaluation(
         record=record, computable=False, exclusion_reason=reason,
         anomaly_flag=anomaly_flag, margin_matrix=None,
     )
-
 
 def evaluate_record(record: ScanProductRecord, cost_config: CostConfig) -> ProductEvaluation:
     if record.status != ProductStatus.DONE:
@@ -344,7 +329,6 @@ def test_list_all_returns_both_pending_and_done_records_with_offer(tmp_path):
     assert by_external_id["2"].status == ProductStatus.PENDING
     assert by_external_id["2"].offer is None
     store.close()
-
 
 def test_list_all_reads_a_negative_result_offer_as_none(tmp_path):
     store = ScanStore(tmp_path / "app.sqlite3")
@@ -480,7 +464,6 @@ COST_CONFIG = CostConfig(
     returns_pct=Decimal("0.02"),
 )
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1", source="csv", external_id="1", variant_id=None,
@@ -489,7 +472,6 @@ def _make_product(**overrides) -> Product:
     )
     defaults.update(overrides)
     return Product(**defaults)
-
 
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
@@ -500,13 +482,11 @@ def _make_offer(**overrides) -> OfferResult:
     defaults.update(overrides)
     return OfferResult(**defaults)
 
-
 def _make_record(record_id, *, status=ProductStatus.DONE, offer=None, **product_overrides) -> ScanProductRecord:
     return ScanProductRecord(
         id=record_id, scan_id="scan-1", product=_make_product(**product_overrides),
         status=status, was_stale=False, offer=offer,
     )
-
 
 def test_build_summary_counts_and_buckets_by_exclusion_reason():
     records = [
@@ -526,7 +506,6 @@ def test_build_summary_counts_and_buckets_by_exclusion_reason():
     assert summary.counts.anomaly == 1
     assert summary.counts.currency_mismatch == 1
     assert summary.counts.not_checked == 1
-
 
 def test_category_table_averages_only_computable_products_at_reference_scenario():
     records = [
@@ -548,7 +527,6 @@ def test_category_table_averages_only_computable_products_at_reference_scenario(
     assert by_category["Dom"].excluded_count == 1
     assert by_category["Dom"].avg_margin_pct is None
 
-
 def test_scenario_matrix_is_global_across_all_computable_products():
     records = [
         _make_record(1, offer=_make_offer(price=Decimal("100.00")), wholesale_price=Decimal("40.00"), category="Elektronika"),
@@ -566,7 +544,6 @@ def test_scenario_matrix_is_global_across_all_computable_products():
         expected_profitable = sum(1 for m in (margin_a, margin_b) if m.margin > 0)
         assert row.profitable_count == expected_profitable
 
-
 def test_scenario_matrix_avg_is_none_when_no_computable_products():
     records = [_make_record(1, status=ProductStatus.PENDING, offer=None)]
 
@@ -574,7 +551,6 @@ def test_scenario_matrix_avg_is_none_when_no_computable_products():
 
     assert all(row.avg_margin_pct is None for row in summary.scenario_matrix)
     assert all(row.profitable_count == 0 for row in summary.scenario_matrix)
-
 
 def test_build_summary_handles_empty_input():
     summary = build_summary([], COST_CONFIG)
@@ -606,7 +582,6 @@ from app.scans.models import ScanProductRecord
 
 _REFERENCE_SCENARIO_INDEX = SCENARIO_ADJUSTMENTS.index(Decimal("0.00"))
 
-
 @dataclass(frozen=True)
 class ReportCounts:
     total: int
@@ -616,7 +591,6 @@ class ReportCounts:
     currency_mismatch: int
     anomaly: int
 
-
 @dataclass(frozen=True)
 class CategoryRow:
     category: str
@@ -624,20 +598,17 @@ class CategoryRow:
     excluded_count: int
     avg_margin_pct: Decimal | None
 
-
 @dataclass(frozen=True)
 class ScenarioRow:
     scenario_pct: Decimal
     avg_margin_pct: Decimal | None
     profitable_count: int
 
-
 @dataclass(frozen=True)
 class ReportSummary:
     counts: ReportCounts
     category_table: tuple[CategoryRow, ...]
     scenario_matrix: tuple[ScenarioRow, ...]
-
 
 def build_summary(records: Iterable[ScanProductRecord], cost_config: CostConfig) -> ReportSummary:
     total = not_checked = no_offer = currency_mismatch = anomaly = computable = 0
@@ -756,7 +727,6 @@ COST_CONFIG = CostConfig(
     returns_pct=Decimal("0.02"),
 )
 
-
 def _make_product(**overrides) -> Product:
     defaults = dict(
         tenant_id="t1", source="csv", external_id="1", variant_id=None,
@@ -765,7 +735,6 @@ def _make_product(**overrides) -> Product:
     )
     defaults.update(overrides)
     return Product(**defaults)
-
 
 def _make_offer(**overrides) -> OfferResult:
     defaults = dict(
@@ -776,13 +745,11 @@ def _make_offer(**overrides) -> OfferResult:
     defaults.update(overrides)
     return OfferResult(**defaults)
 
-
 def _make_record(record_id, *, status=ProductStatus.DONE, offer=None, **product_overrides) -> ScanProductRecord:
     return ScanProductRecord(
         id=record_id, scan_id="scan-1", product=_make_product(external_id=str(record_id), **product_overrides),
         status=status, was_stale=False, offer=offer,
     )
-
 
 def test_paginates_results():
     records = [_make_record(i, offer=_make_offer(), name=f"Product {i}") for i in range(1, 6)]
@@ -796,7 +763,6 @@ def test_paginates_results():
     assert len(page2.rows) == 2
     assert len(page3.rows) == 1
 
-
 def test_filters_by_category():
     records = [
         _make_record(1, offer=_make_offer(), category="Elektronika"),
@@ -807,7 +773,6 @@ def test_filters_by_category():
 
     assert page.total == 1
     assert page.rows[0].record.product.category == "Dom"
-
 
 def test_filters_by_status_computable():
     records = [
@@ -820,7 +785,6 @@ def test_filters_by_status_computable():
     assert page.total == 1
     assert page.rows[0].computable is True
 
-
 def test_filters_by_status_no_offer():
     records = [
         _make_record(1, offer=_make_offer()),
@@ -832,7 +796,6 @@ def test_filters_by_status_no_offer():
     assert page.total == 1
     assert page.rows[0].exclusion_reason.value == "no_offer"
 
-
 def test_sorts_by_name():
     records = [
         _make_record(1, offer=_make_offer(), name="Zebra"),
@@ -842,7 +805,6 @@ def test_sorts_by_name():
     page = list_product_rows(records, COST_CONFIG, sort="name")
 
     assert [row.record.product.name for row in page.rows] == ["Apple", "Zebra"]
-
 
 def test_sorts_by_margin_desc_and_puts_non_computable_rows_last():
     records = [
@@ -880,14 +842,12 @@ _REFERENCE_SCENARIO_INDEX = SCENARIO_ADJUSTMENTS.index(Decimal("0.00"))
 VALID_SORTS = ("category", "margin_asc", "margin_desc", "name")
 VALID_STATUSES = ("computable", "not_checked", "no_offer", "currency_mismatch", "anomaly")
 
-
 @dataclass(frozen=True)
 class ProductPage:
     rows: tuple[ProductEvaluation, ...]
     total: int
     page: int
     page_size: int
-
 
 def _status_matches(evaluation: ProductEvaluation, status: str) -> bool:
     if status == "computable":
@@ -898,12 +858,10 @@ def _status_matches(evaluation: ProductEvaluation, status: str) -> bool:
         and evaluation.exclusion_reason.value == status
     )
 
-
 def _reference_margin_pct(evaluation: ProductEvaluation) -> Decimal | None:
     if not evaluation.computable or evaluation.margin_matrix is None:
         return None
     return evaluation.margin_matrix[_REFERENCE_SCENARIO_INDEX].margin_pct
-
 
 def _sort_key(sort: str):
     if sort == "name":
@@ -915,7 +873,6 @@ def _sort_key(sort: str):
         margin = _reference_margin_pct
         return lambda e: (margin(e) is None, -(margin(e) or Decimal("0")))
     return lambda e: (e.record.product.category, e.record.product.name)
-
 
 def list_product_rows(
     records: Iterable[ScanProductRecord],
@@ -990,14 +947,12 @@ COST_PARAMS = {
     "vat_pct": "0.23", "returns_pct": "0.02",
 }
 
-
 def _make_app(tmp_path):
     app = FastAPI()
     app.include_router(router)
     store = ScanStore(tmp_path / "app.sqlite3")
     app.dependency_overrides[get_store] = lambda: store
     return app, store
-
 
 def _make_product(**overrides) -> Product:
     defaults = dict(
@@ -1007,7 +962,6 @@ def _make_product(**overrides) -> Product:
     )
     defaults.update(overrides)
     return Product(**defaults)
-
 
 def _seed_done_scan(store: ScanStore, *, offer_price=Decimal("100.00")) -> str:
     estimate = estimate_cost(cache_misses=1, stale_count=0, max_concurrency=5)
@@ -1027,7 +981,6 @@ def _seed_done_scan(store: ScanStore, *, offer_price=Decimal("100.00")) -> str:
     store.finalize_scan(scan_id)
     return scan_id
 
-
 def test_report_summary_returns_computed_aggregates(tmp_path):
     app, store = _make_app(tmp_path)
     client = TestClient(app)
@@ -1043,7 +996,6 @@ def test_report_summary_returns_computed_aggregates(tmp_path):
     assert body["category_table"][0]["category"] == "Elektronika"
     store.close()
 
-
 def test_report_summary_404_for_unknown_scan(tmp_path):
     app, store = _make_app(tmp_path)
     client = TestClient(app)
@@ -1052,7 +1004,6 @@ def test_report_summary_404_for_unknown_scan(tmp_path):
 
     assert response.status_code == 404
     store.close()
-
 
 def test_report_summary_400_when_scan_not_terminal(tmp_path):
     app, store = _make_app(tmp_path)
@@ -1070,7 +1021,6 @@ def test_report_summary_400_when_scan_not_terminal(tmp_path):
     assert response.status_code == 400
     store.close()
 
-
 def test_report_summary_400_for_negative_cost_value(tmp_path):
     app, store = _make_app(tmp_path)
     client = TestClient(app)
@@ -1083,7 +1033,6 @@ def test_report_summary_400_for_negative_cost_value(tmp_path):
 
     assert response.status_code == 400
     store.close()
-
 
 def test_report_products_returns_paginated_rows_with_offer_and_margin_matrix(tmp_path):
     app, store = _make_app(tmp_path)
@@ -1105,7 +1054,6 @@ def test_report_products_returns_paginated_rows_with_offer_and_margin_matrix(tmp
     assert isinstance(row["id"], int)
     store.close()
 
-
 def test_report_products_400_for_invalid_sort(tmp_path):
     app, store = _make_app(tmp_path)
     client = TestClient(app)
@@ -1118,7 +1066,6 @@ def test_report_products_400_for_invalid_sort(tmp_path):
 
     assert response.status_code == 400
     store.close()
-
 
 def test_report_products_filters_by_status(tmp_path):
     app, store = _make_app(tmp_path)
@@ -1161,7 +1108,6 @@ router = APIRouter()
 
 REPORTABLE_STATUSES = ("done", "failed")
 
-
 def _parse_decimal(name: str, value: str) -> Decimal:
     try:
         parsed = Decimal(value)
@@ -1175,7 +1121,6 @@ def _parse_decimal(name: str, value: str) -> Decimal:
         )
     return parsed
 
-
 def _cost_config_from_query(
     commission_pct: str, shipping_cost: str, vat_pct: str, returns_pct: str
 ) -> CostConfig:
@@ -1185,7 +1130,6 @@ def _cost_config_from_query(
         vat_pct=_parse_decimal("vat_pct", vat_pct),
         returns_pct=_parse_decimal("returns_pct", returns_pct),
     )
-
 
 def _require_reportable_scan(store: ScanStore, scan_id: str):
     scan = store.get_scan(scan_id)
@@ -1198,7 +1142,6 @@ def _require_reportable_scan(store: ScanStore, scan_id: str):
         )
     return scan
 
-
 def _margin_result_to_dict(result: MarginResult) -> dict:
     return {
         "scenario_pct": str(result.scenario_pct),
@@ -1208,7 +1151,6 @@ def _margin_result_to_dict(result: MarginResult) -> dict:
         "margin": str(result.margin),
         "margin_pct": str(result.margin_pct),
     }
-
 
 def _summary_to_dict(summary: ReportSummary) -> dict:
     return {
@@ -1238,7 +1180,6 @@ def _summary_to_dict(summary: ReportSummary) -> dict:
             for row in summary.scenario_matrix
         ],
     }
-
 
 def _evaluation_to_dict(evaluation: ProductEvaluation) -> dict:
     record = evaluation.record
@@ -1274,7 +1215,6 @@ def _evaluation_to_dict(evaluation: ProductEvaluation) -> dict:
         ),
     }
 
-
 def _product_page_to_dict(page: ProductPage) -> dict:
     return {
         "total": page.total,
@@ -1282,7 +1222,6 @@ def _product_page_to_dict(page: ProductPage) -> dict:
         "page_size": page.page_size,
         "rows": [_evaluation_to_dict(e) for e in page.rows],
     }
-
 
 @router.get("/scans/{scan_id}/report/summary")
 async def get_report_summary(
@@ -1298,7 +1237,6 @@ async def get_report_summary(
     records = store.list_all(scan_id)
     summary = build_summary(records, cost_config)
     return _summary_to_dict(summary)
-
 
 @router.get("/scans/{scan_id}/report/products")
 async def get_report_products(
@@ -1342,7 +1280,6 @@ from app.scans.api import router as scans_router
 app = FastAPI(title="IS_IT_WORTH_IT")
 app.include_router(scans_router)
 app.include_router(reports_router)
-
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
