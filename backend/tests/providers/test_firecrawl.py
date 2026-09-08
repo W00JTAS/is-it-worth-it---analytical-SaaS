@@ -46,18 +46,26 @@ class _FakeResponse:
 class _TwoServiceClient:
     """Returns `search_payload` for the Firecrawl search call, `extract_payload`
     for the Groq extraction call, distinguishing by URL — the two providers
-    hit different hosts entirely."""
+    hit different hosts entirely. Also answers the post-extraction liveness
+    check's `.head()` call — defaults to 200 (alive) so tests that don't
+    care about liveness are unaffected."""
 
-    def __init__(self, search_payload: dict, extract_payload: dict):
+    def __init__(self, search_payload: dict, extract_payload: dict, link_status_code: int = 200):
         self._search_payload = search_payload
         self._extract_payload = extract_payload
+        self._link_status_code = link_status_code
         self.requests: list[dict] = []
+        self.head_requests: list[str] = []
 
     def post(self, url, headers, json):
         self.requests.append({"url": url, "headers": headers, "json": json})
         if url == SEARCH_API_URL:
             return _FakeResponse(self._search_payload)
         return _FakeResponse(self._extract_payload)
+
+    def head(self, url, timeout=None, follow_redirects=None):
+        self.head_requests.append(url)
+        return _FakeResponse({}, status_code=self._link_status_code)
 
 
 def test_two_call_flow_returns_offer_with_citations_from_search_results():
@@ -390,6 +398,52 @@ def test_extract_prompt_rejects_dead_and_unavailable_listings():
     assert "discontinued" in prompt
     assert "404" in prompt
     assert "aggregator" in prompt
+
+
+def test_rejects_offer_when_source_url_is_confirmed_dead():
+    # A search snippet can be stale — the page it was indexed from has since
+    # gone away — with nothing in the cached text to reveal that, so no
+    # prompt instruction can catch it (see
+    # .claude/rules/groq-firecrawl-offer-validity-audit.md's 2026-09-08
+    # update). A live HEAD check against source_url is the only way.
+    client = _TwoServiceClient(
+        search_payload=_search_response([
+            {"title": "Example Shop", "description": "Cena: 89.99 zl", "url": "https://example.com/gone"},
+        ]),
+        extract_payload=_extract_response({
+            "found": True, "price": 89.99, "currency": "PLN", "seller": "Example Shop",
+            "source_url": "https://example.com/gone", "delivery_days": 2, "confidence": 0.85,
+        }),
+        link_status_code=404,
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    assert offer is None
+    assert client.head_requests == ["https://example.com/gone"]
+
+
+def test_keeps_offer_when_source_url_liveness_check_is_inconclusive():
+    # A 403 (bot-block, extremely common on Allegro and similar gated
+    # marketplaces) must never be treated as dead — only a confirmed 404
+    # rejects an offer.
+    client = _TwoServiceClient(
+        search_payload=_search_response([
+            {"title": "Example Shop", "description": "Cena: 89.99 zl", "url": "https://allegro.pl/produkt/x"},
+        ]),
+        extract_payload=_extract_response({
+            "found": True, "price": 89.99, "currency": "PLN", "seller": "Example Shop",
+            "source_url": "https://allegro.pl/produkt/x", "delivery_days": 2, "confidence": 0.85,
+        }),
+        link_status_code=403,
+    )
+    provider = FirecrawlProvider(api_key="k", groq_api_key="g", client=client)
+
+    offer = provider.find_cheapest(_make_product(), market="PL", max_delivery_days=5)
+
+    assert offer is not None
+    assert offer.price == Decimal("89.99")
 
 
 def test_extract_call_includes_max_tokens_and_reasoning_effort():

@@ -8,6 +8,7 @@ import httpx
 
 from app.models.product import Product
 from app.providers.base import OfferResult, ProviderProfile, ProviderUnavailable
+from app.providers.liveness import is_confirmed_dead
 from app.providers.parsing import RESPONSE_SCHEMA, validate_offer_fields
 from app.providers.retry import call_with_retry
 
@@ -70,9 +71,11 @@ class GroqProvider:
 
     name = "groq"
     # Free tier: no dollar cost. seconds_per_query is a documented estimate
-    # (two sequential Groq calls), not a measured guarantee — same caveat as
-    # PerplexityProvider.profile.
-    profile = ProviderProfile(cost_per_query_usd=Decimal("0.000"), seconds_per_query=4.0)
+    # (two sequential Groq calls, plus a bounded liveness HEAD check on a
+    # found offer's source_url — see app/providers/liveness.py, added
+    # 2026-09-08 — typically well under its 5s timeout in practice), not a
+    # measured guarantee — same caveat as PerplexityProvider.profile.
+    profile = ProviderProfile(cost_per_query_usd=Decimal("0.000"), seconds_per_query=5.0)
 
     def __init__(
         self,
@@ -201,10 +204,13 @@ class GroqProvider:
         except (KeyError, IndexError, TypeError, json.JSONDecodeError):
             return None
 
-        return validate_offer_fields(
+        offer = validate_offer_fields(
             parsed, raw_response=raw_response, citations=citations,
             max_delivery_days=max_delivery_days,
         )
+        if offer is not None and is_confirmed_dead(offer.source_url, self._client):
+            return None
+        return offer
 
     def _build_search_prompt(self, product: Product, market: str, max_delivery_days: int) -> str:
         # "in the {market} market" (the original wording) was observed live

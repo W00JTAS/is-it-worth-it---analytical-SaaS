@@ -39,6 +39,9 @@ class _QueueClient:
         self.calls.append({"url": url, "headers": headers, "json": json})
         return _FakeResponse(self._payload)
 
+    def head(self, url, timeout=None, follow_redirects=None):
+        return _FakeResponse({}, status_code=200)
+
 
 class _RateLimitedThenSucceedsClient:
     """First `fail_times` calls return 429 with a Groq-shaped retry-after
@@ -68,6 +71,9 @@ class _RateLimitedThenSucceedsClient:
             }
             return _FakeResponse(body, status_code=429)
         return _FakeResponse(self.success_payload)
+
+    def head(self, url, timeout=None, follow_redirects=None):
+        return _FakeResponse({}, status_code=200)
 
 
 def _found_payload(price: str = "10.00") -> dict:

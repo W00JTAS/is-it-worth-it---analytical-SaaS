@@ -12,6 +12,7 @@ from app.providers.groq import API_URL as GROQ_API_URL
 from app.providers.groq import EXTRACT_MAX_TOKENS as GROQ_EXTRACT_MAX_TOKENS
 from app.providers.groq import EXTRACT_MODEL as GROQ_EXTRACT_MODEL
 from app.providers.groq import EXTRACT_REASONING_EFFORT as GROQ_EXTRACT_REASONING_EFFORT
+from app.providers.liveness import is_confirmed_dead
 from app.providers.parsing import RESPONSE_SCHEMA, validate_offer_fields
 from app.providers.retry import call_with_retry
 
@@ -92,9 +93,11 @@ class FirecrawlProvider:
     # rate (~$83 / 100,000 credits => 2 credits ~= $0.0017) purely as an
     # order-of-magnitude pre-scan estimate, not a billing guarantee — see
     # ProviderProfile's own docstring caveat. seconds_per_query mirrors
-    # GroqProvider's 4.0 (one search call + one extraction call) with a
-    # small margin for Firecrawl's own search latency.
-    profile = ProviderProfile(cost_per_query_usd=Decimal("0.0017"), seconds_per_query=5.0)
+    # GroqProvider's 5.0 (one search call + one extraction call + a bounded
+    # liveness HEAD check on a found offer's source_url, added 2026-09-08 —
+    # see app/providers/liveness.py) with a small margin for Firecrawl's own
+    # search latency.
+    profile = ProviderProfile(cost_per_query_usd=Decimal("0.0017"), seconds_per_query=6.0)
 
     def __init__(
         self,
@@ -250,10 +253,13 @@ class FirecrawlProvider:
                 f"object (no 'found' key): {parsed!r}"
             )
 
-        return validate_offer_fields(
+        offer = validate_offer_fields(
             parsed, raw_response=raw_response, citations=citations,
             max_delivery_days=max_delivery_days,
         )
+        if offer is not None and is_confirmed_dead(offer.source_url, self._client):
+            return None
+        return offer
 
     @staticmethod
     def _format_snippets(results: list[dict]) -> str:
