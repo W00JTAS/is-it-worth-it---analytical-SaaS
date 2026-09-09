@@ -398,8 +398,7 @@ def _offer_at(price: str, **overrides) -> OfferResult:
     return OfferResult(**fields)
 
 
-# Real, confirmed-bad snippet (SKU DLZZOUKLA0055, see
-# .claude/rules/groq-firecrawl-offer-validity-audit.md's 2026-09-08 update):
+# Real, confirmed-bad snippet (SKU DLZZOUKLA0055, found 2026-09-08):
 # the extracted price 365.85 is immediately (across only a currency symbol
 # and a period) followed by "bez VAT" qualifying THAT SAME number.
 NET_PRICE_FIXTURE_BIRD_CAGE = (
