@@ -29,7 +29,7 @@ An entry is kept only if:
   - `outcome == "found"` (no recorded price to gold-set otherwise),
   - `search_raw_text` is present and non-empty (nothing for
     `replay_extract.py` to replay otherwise),
-  - the offer does NOT carry `price_flag == "suspiciously_low"` — that flag
+  - the entry does NOT carry `price_flag == "suspiciously_low"` — that flag
     has a 6/6 hit rate against manual verification in this project's history
     (see the rule file above), so an entry still carrying it has not been
     confirmed and does not belong in a fixture whose whole point is a
@@ -38,6 +38,27 @@ An entry is kept only if:
     already happened out-of-band when those files were produced) — the check
     is here so a future re-run against fresher, not-yet-corrected source
     files can't slip an unverified price into the gold set.
+  - `net_price_flag(price, search_raw_text)` does NOT return `"net_price"` —
+    a confirmed, live-verified defect class (a net/ex-VAT price extracted as
+    though it were the price a buyer actually pays; two named examples are
+    DLZZOUKLA0055 and 960-001459, both previously sitting uncaught in this
+    fixture). This is RECOMPUTED here
+    from `offer.price` + `search_raw_text`, never read from a stored
+    `entry["net_price_flag"]` key — both of this script's current source
+    files were captured before `net_price_flag()` existed as a feature in
+    `provider_eval.py`, so neither entry carries that key at all, and
+    trusting a stored field would silently let both known-bad entries back
+    into the fixture. Recomputing is also idempotent to feature age: it
+    gives the same answer whether the source file predates the flag or not.
+
+  `price_flag` IS read from a stored key — `entry["price_flag"]`, written by
+  `provider_eval.py` as a sibling of `offer`, never nested inside it (see
+  `scripts/provider_eval.py`'s `run_eval`). An earlier version of this
+  function read `entry["offer"]["price_flag"]` instead, so the
+  `suspiciously_low` exclusion above never actually fired. `price_flag`
+  itself can't be recomputed the way `net_price_flag` can — it needs the
+  product's wholesale price, which isn't part of a `provider_eval.py`
+  results entry at all, only the entry's own recorded verdict.
 
 Usage (from `backend/`):
 
@@ -56,9 +77,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.provider_eval import net_price_flag  # noqa: E402 — needs the sys.path insert above
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RESULTS_DIR = SCRIPT_DIR / "eval_results"
@@ -78,10 +102,17 @@ def is_gold_candidate(entry: dict) -> bool:
     """
     if entry.get("outcome") != "found":
         return False
-    if not entry.get("search_raw_text"):
+    search_raw_text = entry.get("search_raw_text")
+    if not search_raw_text:
+        return False
+    if entry.get("price_flag") == "suspiciously_low":
         return False
     offer = entry.get("offer") or {}
-    if offer.get("price_flag") == "suspiciously_low":
+    try:
+        price = Decimal(str(offer["price"]))
+    except (KeyError, InvalidOperation):
+        price = None
+    if price is not None and net_price_flag(price, search_raw_text) == "net_price":
         return False
     return True
 

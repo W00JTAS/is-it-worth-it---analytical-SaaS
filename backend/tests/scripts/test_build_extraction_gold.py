@@ -13,9 +13,9 @@ def test_is_gold_candidate_keeps_only_found_with_raw_text_and_no_suspicious_flag
     found_clean = {"sku": "A", "outcome": "found", "search_raw_text": "1. x\n   y\n   z",
                    "offer": {"price": "10.00"}}
     found_no_flag_key = {"sku": "B", "outcome": "found", "search_raw_text": "1. x\n   y\n   z",
-                          "offer": {"price": "5.00", "price_flag": None}}
+                          "price_flag": None, "offer": {"price": "5.00"}}
     found_suspicious = {"sku": "C", "outcome": "found", "search_raw_text": "1. x\n   y\n   z",
-                         "offer": {"price": "0.01", "price_flag": "suspiciously_low"}}
+                         "price_flag": "suspiciously_low", "offer": {"price": "0.01"}}
     found_no_raw_text = {"sku": "D", "outcome": "found", "search_raw_text": None,
                           "offer": {"price": "10.00"}}
     found_empty_raw_text = {"sku": "E", "outcome": "found", "search_raw_text": "",
@@ -34,12 +34,54 @@ def test_is_gold_candidate_keeps_only_found_with_raw_text_and_no_suspicious_flag
     assert build_extraction_gold.is_gold_candidate(error) is False
 
 
+def test_is_gold_candidate_rejects_price_flag_at_top_level_matching_provider_eval_output_shape():
+    # provider_eval.py writes price_flag as a sibling of "offer", not nested
+    # inside it (scripts/provider_eval.py:460-462) — a candidate carrying it
+    # at the top level must be excluded even though "offer" itself carries
+    # no flag at all.
+    suspicious_low_top_level = {"sku": "I", "outcome": "found", "search_raw_text": "1. x\n   y\n   z",
+                                 "price_flag": "suspiciously_low", "offer": {"price": "0.01"}}
+    clean_top_level = {"sku": "K", "outcome": "found", "search_raw_text": "1. x\n   y\n   z",
+                        "offer": {"price": "10.00"}}
+
+    assert build_extraction_gold.is_gold_candidate(suspicious_low_top_level) is False
+    assert build_extraction_gold.is_gold_candidate(clean_top_level) is True
+
+
+def test_is_gold_candidate_excludes_net_of_vat_prices_recomputed_from_raw_text():
+    # net_price_flag isn't reliably pre-stored on an entry: both source files
+    # this script currently reads (groq+firecrawl_seed42_n25_1788352269.json,
+    # groq+firecrawl_seed7_n25_1788358094.json) were captured before
+    # net_price_flag() existed as a feature in provider_eval.py, so neither
+    # entry carries the key at all — trusting a stored field would silently
+    # let both known-bad entries (DLZZOUKLA0055, 960-001459) back into the
+    # fixture. Recomputing straight from offer.price + search_raw_text closes
+    # that gap regardless of when/whether the source file stored the flag.
+    # Raw text pattern is 960-001459's own real snippet, confirmed live
+    # 2026-09-09: displayed price is 354,99 zł, 288,61 is the "bez VAT" figure.
+    net_price_entry = {
+        "sku": "J", "outcome": "found",
+        "search_raw_text": ("10. Some Store\n   Cena 288,61 zł. bez VAT. Najniższa cena z 30 dni "
+                             "przed obniżką: 356,90 zł. Promocja trwa do %s. 354,99 zł. "
+                             "Cena 354,99 zł."),
+        "offer": {"price": "288.61"},
+    }
+    gross_price_entry = {
+        "sku": "K", "outcome": "found",
+        "search_raw_text": "1. Some Store\n   Cena 354,99 zł.",
+        "offer": {"price": "354.99"},
+    }
+
+    assert build_extraction_gold.is_gold_candidate(net_price_entry) is False
+    assert build_extraction_gold.is_gold_candidate(gross_price_entry) is True
+
+
 def test_build_gold_entries_merges_across_sources_and_counts_per_file(tmp_path):
     source_a = _write_source(tmp_path / "a.json", [
         {"sku": "A1", "outcome": "found", "search_raw_text": "1. x\n   y\n   z", "offer": {"price": "10.00"}},
         {"sku": "A2", "outcome": "not_found", "search_raw_text": None},
         {"sku": "A3", "outcome": "found", "search_raw_text": "1. x\n   y\n   z",
-         "offer": {"price": "1.00", "price_flag": "suspiciously_low"}},
+         "price_flag": "suspiciously_low", "offer": {"price": "1.00"}},
     ])
     source_b = _write_source(tmp_path / "b.json", [
         {"sku": "B1", "outcome": "found", "search_raw_text": "1. p\n   q\n   r", "offer": {"price": "20.00"}},
@@ -59,7 +101,7 @@ def test_build_gold_payload_shape_matches_replay_extract_expectations(tmp_path):
     source_b = _write_source(tmp_path / "b.json", [
         {"sku": "B1", "outcome": "found", "search_raw_text": "1. p\n   q\n   r", "offer": {"price": "20.00"}},
         {"sku": "B2", "outcome": "found", "search_raw_text": "1. p\n   q\n   r",
-         "offer": {"price": "0.50", "price_flag": "suspiciously_low"}},
+         "price_flag": "suspiciously_low", "offer": {"price": "0.50"}},
     ])
 
     payload = build_extraction_gold.build_gold_payload([source_a, source_b])
