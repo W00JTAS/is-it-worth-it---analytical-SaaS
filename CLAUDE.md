@@ -60,5 +60,13 @@ comparable to the size of the effect a prompt change produces, so:
 - `backend/scripts/replay_extract.py` — replays stored search text through extraction only, at
   zero search-step cost, and checkpoints atomically after every entry so a mid-run kill resumes.
 - `backend/scripts/build_extraction_gold.py` — builds the gold set the replays are scored against.
+- `backend/scripts/verify_offers_browser.mjs` — opens every `found` offer's `source_url` in a real
+  browser (bare HTTP clients get 403'd by Allegro and other bot-gated stores) and dumps the
+  rendered page text, so a human/agent can judge product match, price match, and whether a lower
+  price is visible elsewhere on the same page. Needs Playwright and a Chrome binary, pointed at via
+  two optional env vars: `PLAYWRIGHT_MODULE` (module/path to import `chromium` from, defaults to
+  the plain `playwright` package) and `CHROME_PATH` (defaults to Playwright's bundled Chromium
+  when unset). Run from `backend/`:
+  `PLAYWRIGHT_MODULE=... CHROME_PATH=... node scripts/verify_offers_browser.mjs <found_offers.json> <out.json>`.
 
 Always report the hold-out number, not the tuning number.
