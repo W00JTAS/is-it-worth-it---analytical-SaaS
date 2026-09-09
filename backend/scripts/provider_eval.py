@@ -284,6 +284,122 @@ def load_prior_results(path: Path) -> list[dict]:
     raise ValueError(f"unrecognized result file shape in {path}")
 
 
+# Net-of-VAT marker phrases actually observed in captured search snippets
+# (Polish and English), plus two English forms not yet observed live but
+# plausible on an English-language listing — see net_price_flag()'s
+# docstring for why a synthetic fixture is acceptable for those.
+NET_PRICE_MARKERS = (
+    "bez VAT", "netto", "bez podatku", "excl. VAT", "excl VAT", "ex VAT", "ex. VAT",
+)
+_NET_PRICE_MARKER_RE = re.compile(
+    "|".join(re.escape(m) for m in NET_PRICE_MARKERS), re.IGNORECASE,
+)
+# A price-shaped number after normalization: digits, a comma or dot decimal
+# separator, exactly two decimal digits (thousands-separator spaces are
+# already stripped by _normalize_thousands_separator_spaces before this is
+# ever applied to search text).
+_PRICE_NUMBER_RE = re.compile(r"\d+[.,]\d{2}")
+# How far past the extracted price to look for a net-price marker, and how
+# far past a candidate marker to look for a DIFFERENT price number that the
+# marker might actually belong to (the GAR OPAL false-positive case: "netto"
+# sits right before ANOTHER number, not qualifying the price we started
+# from). Both are generous single-digit-word-count windows, not tuned
+# precisely — see net_price_flag()'s docstring for the two fixtures that
+# pin this behaviour down.
+_MARKER_LOOKAHEAD_CHARS = 60
+_FOLLOWING_NUMBER_LOOKAHEAD_CHARS = 12
+
+
+def _normalize_thousands_separator_spaces(text: str) -> str:
+    """Strips a space-like character (plain space, thin space U+2009,
+    non-breaking space U+00A0, narrow no-break space U+202F) that sits
+    directly between two digits — the Polish thousands separator, e.g.
+    "2 779,00" -> "2779,00". Deliberately does NOT touch a space between a
+    digit and a non-digit (e.g. "85 zł"), so this never merges unrelated
+    text.
+    """
+    return re.sub(r"(?<=\d)[\s   ](?=\d)", "", text)
+
+
+def _price_string_variants(price: Decimal) -> set[str]:
+    """Both the dot form Decimal.price naturally carries (offers store
+    price as e.g. Decimal("365.85")) and the Polish comma form the raw
+    search snippet actually writes (e.g. "365,85"), plus a 2-decimal-place
+    variant of each in case the offer's own Decimal carries no fractional
+    digits (e.g. Decimal("300")) while the snippet still writes "300,00".
+    """
+    variants = {str(price)}
+    try:
+        variants.add(str(price.quantize(Decimal("0.01"))))
+    except InvalidOperation:
+        pass
+    variants |= {v.replace(".", ",") for v in variants}
+    return variants
+
+
+def net_price_flag(price: Decimal, search_text: str | None) -> str | None:
+    """Returns "net_price" when the raw search snippet shows the extracted
+    `price` is actually a NET (ex-VAT) price rather than the gross price a
+    consumer actually pays, else None.
+
+    Eval-side only, exactly like `price_flag` — never a provider-side
+    rejection, and this must NEVER be folded into `price_flag`'s own key:
+    `build_extraction_gold.py` excludes gold-set entries carrying
+    `price_flag == "suspiciously_low"`, and this signal has a demonstrated
+    false-positive risk of its own (see below), so sharing a key would
+    silently drop good entries from the gold set.
+
+    The check: find the extracted price in the (thousands-separator-
+    normalized) search text, then look a short distance ahead for a
+    net-price marker phrase (`NET_PRICE_MARKERS`) with no OTHER price-shaped
+    number appearing in between — that "no other number in between" guard is
+    what lets this tell apart the two real cases this was built against:
+
+    - SKU DLZZOUKLA0055 (a real confirmed-bad case): "...365,85 zł. Cena
+      365,85 zł. bez VAT...." — the SECOND occurrence of 365,85 is followed,
+      across only a currency symbol and a period, by "bez VAT" with no other
+      number in between. Flags correctly.
+    - SKU GAR OPAL ARTISAN KPL (a real confirmed-GOOD, browser-verified
+      case): "Cena brutto 279,99 PLNCena netto 227,63 PLN" — "netto" DOES
+      appear shortly after 279,99, but it is immediately followed by a
+      DIFFERENT number, 227,63. A naive "does a net-marker appear nearby"
+      check flags this wrongly; this function's second guard (does the
+      marker itself lead straight into another price-shaped number?)
+      excludes it, because the marker belongs to that following number, not
+      to 279,99.
+
+    Both fixtures are locked in by tests in test_provider_eval.py — this
+    docstring is not a substitute for reading those.
+    """
+    if not search_text:
+        return None
+    normalized = _normalize_thousands_separator_spaces(search_text)
+    for variant in _price_string_variants(price):
+        price_re = re.compile(r"(?<!\d)" + re.escape(variant) + r"(?!\d)")
+        for match in price_re.finditer(normalized):
+            window_start = match.end()
+            window_end = min(len(normalized), window_start + _MARKER_LOOKAHEAD_CHARS)
+            window = normalized[window_start:window_end]
+            marker_match = _NET_PRICE_MARKER_RE.search(window)
+            if marker_match is None:
+                continue
+            before_marker = window[:marker_match.start()]
+            if _PRICE_NUMBER_RE.search(before_marker):
+                # A different price-shaped number sits between our price and
+                # this marker, so the marker isn't "immediately" qualifying
+                # our price — it belongs to that other number (or further
+                # along). Try the next occurrence instead.
+                continue
+            after_marker = window[marker_match.end():marker_match.end() + _FOLLOWING_NUMBER_LOOKAHEAD_CHARS]
+            if _PRICE_NUMBER_RE.search(after_marker):
+                # The marker itself leads straight into a DIFFERENT price
+                # number (the GAR OPAL case) — it qualifies THAT number, not
+                # the one we started from.
+                continue
+            return "net_price"
+    return None
+
+
 def price_flag(offer: OfferResult, product: Product) -> str | None:
     """Returns "suspiciously_low" when a found offer's price is implausible
     against the product's own wholesale price, else None.
@@ -335,11 +451,21 @@ def run_eval(
                 entry["outcome"] = "found"
                 entry["offer"] = {k: str(v) if isinstance(v, Decimal) else v
                                    for k, v in asdict(offer).items() if k != "raw_response"}
+                # Read the raw search text now, ahead of computing either
+                # flag — net_price_flag needs it, and price_flag doesn't
+                # care about ordering, so this read moved up from the
+                # keep_raw block below (which still separately controls
+                # whether it's PERSISTED into the written file).
+                search_text = getattr(provider, "last_search_text", None)
                 flag = price_flag(offer, product)
                 if flag is not None:
                     entry["price_flag"] = flag
+                net_flag = net_price_flag(offer.price, search_text)
+                if net_flag is not None:
+                    entry["net_price_flag"] = net_flag
                 print(f"FOUND {offer.price} {offer.currency} @ {offer.seller}"
-                      + (f"  [{flag}]" if flag else ""))
+                      + (f"  [{flag}]" if flag else "")
+                      + (f"  [{net_flag}]" if net_flag else ""))
         if keep_raw:
             # Not every provider exposes this — GroqProvider and
             # FirecrawlProvider do (via last_search_text), and
@@ -485,6 +611,10 @@ def main() -> None:
     if flagged:
         print(f"  {flagged} found entr{'y' if flagged == 1 else 'ies'} flagged "
               f"price_flag=suspiciously_low — spot-check these first")
+    net_flagged = sum(1 for r in results if r.get("net_price_flag"))
+    if net_flagged:
+        print(f"  {net_flagged} found entr{'y' if net_flagged == 1 else 'ies'} flagged "
+              f"net_price_flag=net_price — spot-check these too")
     print(f"Results written to {out_file}")
 
 

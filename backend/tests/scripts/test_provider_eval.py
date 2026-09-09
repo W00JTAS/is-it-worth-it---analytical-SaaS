@@ -388,6 +388,204 @@ def test_price_flag_helper_boundaries():
     assert provider_eval.price_flag(offer_at("250.00"), product) is None
 
 
+def _offer_at(price: str, **overrides) -> OfferResult:
+    fields = dict(
+        price=Decimal(price), currency="PLN", seller="S",
+        source_url="https://example.com", delivery_days=1, confidence=0.5,
+        citations=(), raw_response="raw",
+    )
+    fields.update(overrides)
+    return OfferResult(**fields)
+
+
+# Real, confirmed-bad snippet (SKU DLZZOUKLA0055, found 2026-09-08):
+# the extracted price 365.85 is immediately (across only a currency symbol
+# and a period) followed by "bez VAT" qualifying THAT SAME number.
+NET_PRICE_FIXTURE_BIRD_CAGE = (
+    "9. ZOLUX Klatka dla ptaków Neo JILI H80 kol. szary - Takwiele.pl\n"
+    "   Czas wysyłki: 24 godziny. 365,85 zł. Cena 365,85 zł. bez VAT. "
+    "Najniższa cena z 30 dni przed obniżką: 347,55 zł. "
+    "Promocja trwa do %s. 449,99 zł. Cena 449,99 zł.\n"
+    "   https://takwiele.pl/pl/p/ZOLUX-Klatka-dla-ptakow-Neo-JILI-H80-kol.-szary/16460"
+    "?srsltid=AfmBOorA2nSoqfaGKbIpz4WGwX6dw2RmjVZfGQbdS4OHV4ZqaowQrxPS"
+)
+
+# Real, confirmed-GOOD, browser-verified snippet (SKU GAR OPAL ARTISAN KPL):
+# the extracted price 279.99 is the GROSS/"brutto" price and is immediately
+# followed by "PLNCena netto 227,63 PLN" — "netto" here qualifies the
+# DIFFERENT, following number 227,63, not 279.99. This is the exact known
+# false positive a naive "does 'netto' appear nearby" check would produce.
+NET_PRICE_FIXTURE_GARDEROBA = (
+    "10. GARDEROBA OPAL ARTISAN KOMPLET - Meble przedpokojowe\n"
+    "   Cena brutto 279,99 PLNCena netto 227,63 PLN. Dostawa ok. 5 dni. "
+    "Dodaj do koszyka · GARDEROBA DUO SONOMA ...\n"
+    "   https://primavo.pl/produkt/garderoba-opal-artisan-komplet-meble-przedpokojowe"
+)
+
+
+def test_net_price_flag_flags_the_bird_cage_net_price_case():
+    assert provider_eval.net_price_flag(
+        Decimal("365.85"), NET_PRICE_FIXTURE_BIRD_CAGE,
+    ) == "net_price"
+
+
+def test_net_price_flag_does_not_flag_the_garderoba_false_positive_case():
+    # This assertion is the one that matters: it locks in the known false
+    # positive (a "netto" nearby that belongs to a DIFFERENT number).
+    assert provider_eval.net_price_flag(
+        Decimal("279.99"), NET_PRICE_FIXTURE_GARDEROBA,
+    ) is None
+
+
+@pytest.mark.parametrize("marker", [
+    "bez VAT", "netto", "bez podatku", "excl. VAT", "excl VAT", "ex VAT", "ex. VAT",
+])
+def test_net_price_flag_covers_every_observed_marker_phrase(marker):
+    text = f"Some product. Cena 42,00 zł. {marker}. Free shipping."
+    assert provider_eval.net_price_flag(Decimal("42.00"), text) == "net_price"
+
+
+def test_net_price_flag_normalizes_polish_thousands_separator_spaces():
+    # Real captured data writes higher amounts with a normal space AND with
+    # thin (U+2009), non-breaking (U+00A0) and narrow-no-break (U+202F)
+    # space characters as the thousands separator.
+    for space in (" ", " ", " ", " "):
+        text = f"Cena 2{space}779,00 zł. bez VAT."
+        assert provider_eval.net_price_flag(Decimal("2779.00"), text) == "net_price", \
+            f"failed for separator {space!r}"
+
+
+def test_net_price_flag_matches_comma_decimal_form_against_dot_stored_price():
+    # Offers store price as Decimal("365.85") (dot); the snippet always
+    # writes the Polish comma form.
+    text = "Cena 365,85 zł. bez VAT."
+    assert provider_eval.net_price_flag(Decimal("365.85"), text) == "net_price"
+
+
+def test_net_price_flag_returns_none_when_search_text_is_missing():
+    assert provider_eval.net_price_flag(Decimal("10.00"), None) is None
+    assert provider_eval.net_price_flag(Decimal("10.00"), "") is None
+
+
+def test_net_price_flag_does_not_match_a_price_that_is_a_substring_of_a_bigger_number():
+    # 9,99 must not match inside 19,99 — a plain substring search would.
+    text = "Cena 19,99 zł. bez VAT."
+    assert provider_eval.net_price_flag(Decimal("9.99"), text) is None
+
+
+def test_net_price_flag_ignores_a_net_marker_nowhere_near_the_extracted_price():
+    # "netto" is present in the text, but sits far past the lookahead window
+    # this heuristic uses — a marker only counts when it (almost)
+    # immediately follows the extracted price.
+    filler = "x" * 80
+    text = f"Cena 42,00 zł. {filler} netto na zupełnie inny temat."
+    assert provider_eval.net_price_flag(Decimal("42.00"), text) is None
+
+
+def test_run_eval_wires_net_price_flag_into_the_found_entry():
+    class _RawTextProvider:
+        name = "fake"
+
+        def __init__(self, offer, raw_text):
+            self._offer = offer
+            self.last_search_text = raw_text
+
+        def find_cheapest(self, product, market, max_delivery_days):
+            return self._offer
+
+    offer = _offer_at("365.85", seller="Takwiele.pl")
+    provider = _RawTextProvider(offer, NET_PRICE_FIXTURE_BIRD_CAGE)
+    product = _make_product("A", wholesale="2000.00")  # keep price_flag out of the way (threshold 200)
+
+    results = provider_eval.run_eval(
+        provider, [product], market="PL", max_delivery_days=5, delay_seconds=0,
+    )
+
+    assert results[0]["net_price_flag"] == "net_price"
+    assert "price_flag" not in results[0]  # independent of the wholesale-ratio flag
+
+
+def test_run_eval_does_not_set_net_price_flag_for_the_garderoba_case():
+    class _RawTextProvider:
+        name = "fake"
+
+        def __init__(self, offer, raw_text):
+            self._offer = offer
+            self.last_search_text = raw_text
+
+        def find_cheapest(self, product, market, max_delivery_days):
+            return self._offer
+
+    offer = _offer_at("279.99", seller="Primavo.pl")
+    provider = _RawTextProvider(offer, NET_PRICE_FIXTURE_GARDEROBA)
+    product = _make_product("A", wholesale="5000.00")
+
+    results = provider_eval.run_eval(
+        provider, [product], market="PL", max_delivery_days=5, delay_seconds=0,
+    )
+
+    assert "net_price_flag" not in results[0]
+
+
+def test_run_eval_net_price_flag_works_even_without_keep_raw(monkeypatch, capsys):
+    # The flag must surface on an ordinary live run, not only when --keep-raw
+    # is also passed — --keep-raw only controls whether search_raw_text is
+    # persisted into the written file.
+    results_dir = provider_eval.RESULTS_DIR
+    products = [_make_product("A", wholesale="5000.00")]
+
+    class _FakeNetPriceProvider:
+        name = "fake"
+
+        def __init__(self):
+            self.last_search_text = NET_PRICE_FIXTURE_BIRD_CAGE
+
+        def find_cheapest(self, product, market, max_delivery_days):
+            return _offer_at("365.85", seller="Takwiele.pl")
+
+    fake = _FakeNetPriceProvider()
+    _run_main(monkeypatch, [*BASE_ARGV, "--sample-size", "1"], products, fake)
+
+    out_file = next(results_dir.glob("groq-compound-mini_seed1_n1_*.json"))
+    data = json.loads(out_file.read_text())
+    entry = data["results"][0]
+    assert entry["net_price_flag"] == "net_price"
+    assert "search_raw_text" not in entry  # keep-raw was NOT passed
+
+    out = capsys.readouterr().out
+    assert "net_price" in out
+
+
+def test_summary_reports_both_price_flag_and_net_price_flag_counts(monkeypatch, capsys):
+    # Neither flag's dedicated end-of-run summary line (as opposed to the
+    # per-product marker printed while a run is in progress) had a test
+    # before this one — this locks in the exact summary text an operator
+    # relies on for manual spot-checks, for both flags.
+    results_dir = provider_eval.RESULTS_DIR
+    products = [_make_product("A", wholesale="2000.00")]
+
+    class _FakeNetPriceProvider:
+        name = "fake"
+
+        def __init__(self):
+            self.last_search_text = NET_PRICE_FIXTURE_BIRD_CAGE
+
+        def find_cheapest(self, product, market, max_delivery_days):
+            return _offer_at("365.85", seller="Takwiele.pl")
+
+    fake = _FakeNetPriceProvider()
+    _run_main(monkeypatch, [*BASE_ARGV, "--sample-size", "1"], products, fake)
+
+    out_file = next(results_dir.glob("groq-compound-mini_seed1_n1_*.json"))
+    entry = json.loads(out_file.read_text())["results"][0]
+    assert entry["net_price_flag"] == "net_price"
+    assert "price_flag" not in entry  # wholesale threshold kept out of the way
+
+    out = capsys.readouterr().out
+    assert "1 found entry flagged net_price_flag=net_price — spot-check these too" in out
+    assert "price_flag=suspiciously_low" not in out  # no price_flag hits in this run
+
+
 def test_find_latest_result_file_ignores_files_without_an_integer_timestamp():
     results_dir = provider_eval.RESULTS_DIR
     (results_dir / "groq-compound-mini_seed1_n3_1000.json").write_text("[]")
