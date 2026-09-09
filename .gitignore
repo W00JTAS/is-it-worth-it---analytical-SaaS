@@ -7,8 +7,7 @@
 /*_z_cenami_i_ean.csv
 /catalog*.csv
 
-# Local agent tooling and its artifacts — never published
-# (see ~/.claude/rules/claude-dir-never-on-github.md)
+# Local agent tooling and its artifacts — never published, per this project's own policy
 /.claude/
 /.agents/
 /.playwright-mcp/

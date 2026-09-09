@@ -611,6 +611,10 @@ def main() -> None:
     if flagged:
         print(f"  {flagged} found entr{'y' if flagged == 1 else 'ies'} flagged "
               f"price_flag=suspiciously_low — spot-check these first")
+    net_flagged = sum(1 for r in results if r.get("net_price_flag"))
+    if net_flagged:
+        print(f"  {net_flagged} found entr{'y' if net_flagged == 1 else 'ies'} flagged "
+              f"net_price_flag=net_price — spot-check these too")
     print(f"Results written to {out_file}")
 
 

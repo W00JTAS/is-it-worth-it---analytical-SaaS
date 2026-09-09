@@ -556,6 +556,36 @@ def test_run_eval_net_price_flag_works_even_without_keep_raw(monkeypatch, capsys
     assert "net_price" in out
 
 
+def test_summary_reports_both_price_flag_and_net_price_flag_counts(monkeypatch, capsys):
+    # Neither flag's dedicated end-of-run summary line (as opposed to the
+    # per-product marker printed while a run is in progress) had a test
+    # before this one — this locks in the exact summary text an operator
+    # relies on for manual spot-checks, for both flags.
+    results_dir = provider_eval.RESULTS_DIR
+    products = [_make_product("A", wholesale="2000.00")]
+
+    class _FakeNetPriceProvider:
+        name = "fake"
+
+        def __init__(self):
+            self.last_search_text = NET_PRICE_FIXTURE_BIRD_CAGE
+
+        def find_cheapest(self, product, market, max_delivery_days):
+            return _offer_at("365.85", seller="Takwiele.pl")
+
+    fake = _FakeNetPriceProvider()
+    _run_main(monkeypatch, [*BASE_ARGV, "--sample-size", "1"], products, fake)
+
+    out_file = next(results_dir.glob("groq-compound-mini_seed1_n1_*.json"))
+    entry = json.loads(out_file.read_text())["results"][0]
+    assert entry["net_price_flag"] == "net_price"
+    assert "price_flag" not in entry  # wholesale threshold kept out of the way
+
+    out = capsys.readouterr().out
+    assert "1 found entry flagged net_price_flag=net_price — spot-check these too" in out
+    assert "price_flag=suspiciously_low" not in out  # no price_flag hits in this run
+
+
 def test_find_latest_result_file_ignores_files_without_an_integer_timestamp():
     results_dir = provider_eval.RESULTS_DIR
     (results_dir / "groq-compound-mini_seed1_n3_1000.json").write_text("[]")
